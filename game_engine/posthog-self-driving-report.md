@@ -15,7 +15,7 @@ PostHog Self-driving has been configured for this project. Session replay, error
 **Status:** Connected during this run.
 
 - Integration ID: 73944
-- Account: marcdhi
+- Account: RajdeepKushwaha5
 - Connected at: 2026-07-28T12:35:07Z
 
 Self-driving will use this to research findings against the repository and open fixes.
