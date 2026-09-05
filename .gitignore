@@ -9,3 +9,5 @@ __pycache__/
 
 .cursor/
 .claude
+.env*
+!.env.example
