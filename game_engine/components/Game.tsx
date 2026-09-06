@@ -19,6 +19,7 @@ import { BARBER_INTERACT_LABEL, BARBER_XP, barberTaskId } from "@/lib/game/barbe
 import type { DistrictProgress } from "@/lib/game/progress";
 import { errandLevelNumber, lessonTierFor } from "@/lib/game/levels";
 import { adaptiveTier, type RetentionSignal } from "@/lib/game/adaptive";
+import DailyRound, { type Round } from "@/components/DailyRound";
 import { useGameAudio } from "@/lib/audio/useGameAudio";
 import { playSfx } from "@/lib/audio/sfx";
 import Title from "./Title";
@@ -61,6 +62,11 @@ export default function GameShell() {
   const [dueCount, setDueCount] = useState(0);
   /** Recall evidence for this district; null until /api/due answers. */
   const [retention, setRetention] = useState<RetentionSignal | null>(null);
+  /** Today's practice round; null when nothing is due or signed out. */
+  const [round, setRound] = useState<Round | null>(null);
+  const [roundOpen, setRoundOpen] = useState(false);
+  /** Round stops practised this session, by task id. */
+  const [roundCleared, setRoundCleared] = useState<Set<string>>(new Set());
 
   const [district, setDistrict] = useState<District | null>(null);
   const [tasks, setTasks] = useState<StreetTask[]>([]);
@@ -116,6 +122,26 @@ export default function GameShell() {
       lessonTier: tier,
     });
   }, [talking, comfort, tasksMemo, retention]);
+
+  // Advancing the streak is a write, so it happens once, when the last stop
+  // is walked — not on every render that happens to look complete.
+  const roundBankedRef = useRef(false);
+  useEffect(() => {
+    if (!round || roundBankedRef.current) return;
+    const stops = round.stops.map((s) => s.taskId);
+    if (stops.length === 0 || !stops.every((id) => roundCleared.has(id))) return;
+
+    roundBankedRef.current = true;
+    void fetch(`/api/round?tzOffset=${new Date().getTimezoneOffset()}`, { method: "POST" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        if (!res) return;
+        setRound((prev) => (prev ? { ...prev, clearedToday: true, streak: res.streak } : prev));
+        setRoundOpen(true);
+        playSfx("cash");
+      })
+      .catch(() => {});
+  }, [round, roundCleared]);
 
   const nearbyRef = useRef<string | null>(null);
   const nearBarberRef = useRef(false);
@@ -347,6 +373,17 @@ export default function GameShell() {
       })
       .catch(() => {});
 
+    // Offered once on entry, never nagged: a review prompt that will not go
+    // away is a reason to stop opening the game.
+    void fetch(`/api/round?tzOffset=${new Date().getTimezoneOffset()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((r: Round | null) => {
+        if (cancelled || !r?.stops?.length || r.clearedToday) return;
+        setRound(r);
+        setRoundOpen(true);
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
       game.dispose();
@@ -451,6 +488,11 @@ export default function GameShell() {
   const onComplete = useCallback(
     (taskId: string, reward: number) => {
       if (!district) return;
+
+      // A round stop counts as walked once its drill has actually been
+      // played, whatever the errand outcome: the phrases were said, which is
+      // the thing the schedule cares about.
+      setRoundCleared((prev) => (prev.has(taskId) ? prev : new Set(prev).add(taskId)));
 
       // The haircut pays XP and rolls the cutscene. Deliberately not added to
       // `completed`: it is optional, and counting it would let it stand in for
@@ -592,6 +634,17 @@ export default function GameShell() {
   return (
     <div className="relative h-screen w-screen overflow-hidden">
       <canvas ref={canvasRef} className="scene" />
+
+      {round && roundOpen && !gameplayFrozen && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-4 sm:inset-x-auto sm:right-4 sm:justify-end">
+          <DailyRound
+            round={round}
+            cleared={roundCleared}
+            onStart={() => setRoundOpen(false)}
+            onDismiss={() => setRoundOpen(false)}
+          />
+        </div>
+      )}
 
       <Hud
         district={district}
