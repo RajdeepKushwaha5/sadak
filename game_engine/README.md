@@ -75,6 +75,45 @@ gloss. Press `P` in the world, or tap the chips inside a conversation to drop
 the phrase straight into the input. You can clear a district knowing six real
 sentences you did not know before.
 
+### Retention: knowing it next week
+
+Clearing a district proves you got through it once. It says nothing about
+whether you can still say any of it on Tuesday — and an app you finish is not
+an app you learn from.
+
+So every spoken line is also a spaced-repetition review. `scoreAttempt`
+already grades each attempt 0-100 against the exact phrase the drill asked
+for; that score feeds [FSRS](https://github.com/open-spaced-repetition/ts-fsrs)
+and schedules the phrase. No quiz, no flashcard deck, nothing extra asked of
+the player — the errand *is* the review.
+
+| Score | Grade | Effect |
+| --- | --- | --- |
+| 90-100 | Easy | stops asking to be practised |
+| 72-89 | Good | interval lengthens |
+| 40-71 | Hard | comes back sooner |
+| 0-39 | Again | lapse; back to today |
+
+The thresholds are the same 72/40 bands the words are coloured with and the
+sounds play on, so what you hear and what the scheduler does cannot disagree.
+
+**What that buys:**
+
+- **A review round that is a walk.** Due phrases resolve to the NPC who
+  teaches them, so those NPCs pulse violet on the map. Today's round is three
+  or four stops, not a deck. `GET /api/round`
+- **A streak that means something.** Consecutive days a round was *cleared* —
+  never days opened, never partial rounds. Day boundaries use your own
+  timezone, so practising at 1am counts for that day.
+- **Difficulty from recall, not map position.** Lesson tier used to come from
+  which errand you were standing at. It now comes from what you have actually
+  held (stability >= 7 days) versus what has decayed — nudged one step at
+  most, and only once there are four reviewed phrases to judge on. New players
+  see the comfort setting they chose.
+- **A report at `/progress`.** Every phrase as held, fading or lost, with who
+  taught it. Overdue on a phrase that never held needs re-teaching; overdue on
+  one that did needs a reminder. The report keeps that apart.
+
 ## The pipeline
 
 ```
@@ -162,10 +201,27 @@ Sign-in options on `/login`: **Continue with Google** or **Email me a magic link
 
 ### District worlds & progress (database)
 
-District content and per-user progress live in Supabase Postgres (not in the client bundle). After auth is configured, run these once in **SQL Editor** (in order):
+District content and per-user progress live in Supabase Postgres (not in the client bundle). Every migration in `supabase/migrations/` has to be applied, in filename order.
 
-1. [`supabase/migrations/001_worlds_and_progress.sql`](supabase/migrations/001_worlds_and_progress.sql) — tables + RLS
-2. [`supabase/migrations/002_seed_districts.sql`](supabase/migrations/002_seed_districts.sql) — four districts
+The seed migrations are ~380 KB of inserts between them, which is slow to paste
+and easy to apply out of order, so there is a runner. Add your database URI
+(Dashboard -> **Connect** -> Session pooler) to `.env`:
+
+```
+SUPABASE_DB_URL=postgresql://postgres.<ref>:<password>@...pooler.supabase.com:5432/postgres
+```
+
+then:
+
+```bash
+npx tsx scripts/run-migrations.ts
+```
+
+Each file runs in its own transaction; anything already present is reported and
+skipped, so it is safe to re-run after adding a migration. To apply them by hand
+instead, paste each file into **SQL Editor** in filename order — `001` creates the
+tables everything else references, `002`/`007` seed the districts, and `012`/`013`
+back retention and streaks.
 
 To refresh seed data after editing `lib/game/districts.ts` or `lib/game/tasks.ts`:
 
@@ -264,6 +320,13 @@ components/
   Kannada and Bengali are loaded explicitly rather than left to fallback.
 
 ## Provenance
+
+The world, the districts, the voice pipeline and the drill were built for the
+Sarvam Epoch Buildathon. The retention layer described under *Retention:
+knowing it next week* — `phrase_memory`, FSRS scheduling, `/api/due`,
+`/api/round`, `/api/report`, the daily round and the adaptive lesson tier —
+was built afterwards, and is what turns a campaign you finish into something
+you can still speak a fortnight later.
 
 Sibling to [kahani](https://github.com/harshagw/kahani), our AI game studio that
 generates isometric worlds from a text premise. Kahani's Sarvam TTS client is the
