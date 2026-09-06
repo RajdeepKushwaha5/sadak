@@ -27,7 +27,7 @@ const ALREADY_EXISTS = new Set(["42P07", "42710", "42P06", "42723"]);
 async function main() {
   const url = process.env.SUPABASE_DB_URL;
   if (!url) {
-    console.error("Missing SUPABASE_DB_URL in .env — see the header of this file.");
+    console.error("Missing SUPABASE_DB_URL in .env. See the header of this file.");
     process.exit(1);
   }
 

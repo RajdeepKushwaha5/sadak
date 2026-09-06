@@ -134,10 +134,8 @@ export default function LoginForm() {
       </p>
 
       <p className="mt-4 text-sm leading-relaxed text-foreground/70">
-        Ten Indian cities. Nobody on the street speaks English, and the only way
-        past them is to say the thing yourself. Say it well enough and the game
-        remembers — then asks for it again a week later, when you have started
-        to forget.
+        Ten Indian cities. Nobody speaks English. Say it yourself, and the game
+        asks again once you start to forget.
       </p>
 
       {authError ? (

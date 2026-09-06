@@ -62,7 +62,7 @@ export function clearRound(streak: Streak, today: string): Streak {
  * What the streak reads as *now*, without writing anything.
  *
  * A streak whose last clear was before yesterday is already broken, but the
- * row still says otherwise until the next clear — so the display has to
+ * row still says otherwise until the next clear, so the display has to
  * decide, not the stored number.
  */
 export function streakAsOf(streak: Streak, today: string): { current: number; atRisk: boolean } {

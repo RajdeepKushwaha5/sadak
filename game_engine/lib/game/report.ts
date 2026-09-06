@@ -65,7 +65,7 @@ export function buildDistrictReport(
       standing,
       retainsDays: m.stability === null ? null : Math.round(m.stability),
       lapses: m.lapses,
-      teacher: site ? `${site.name} (${site.role})` : "—",
+      teacher: site ? `${site.name} (${site.role})` : "",
     };
   });
 

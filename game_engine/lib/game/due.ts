@@ -72,7 +72,7 @@ export function indexPhraseSites(tasks: StreetTask[]): Map<string, PhraseSite> {
  * round starts where recall is weakest.
  *
  * Phrases with no site left in the pack (a lesson was reworded since they
- * were learned) are returned separately rather than silently dropped — they
+ * were learned) are returned separately rather than silently dropped. They
  * are still real gaps, they just have nowhere to send the player.
  */
 export function groupDueByTask(

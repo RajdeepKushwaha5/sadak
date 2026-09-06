@@ -10,7 +10,7 @@ import {
 /**
  * Per-phrase retention state. Every drill line is already scored by
  * `scoreAttempt` against the exact phrase the player was asked to say, so
- * that score is a review grade — the errand *is* the review, and nothing
+ * that score is a review grade. The errand *is* the review, and nothing
  * extra has to be asked of the player.
  */
 export type PhraseMemory = {
@@ -46,7 +46,7 @@ export type PhraseMemoryRow = {
  * The drill asks the player to repeat a line and scores the sound of it. The
  * errand asks them to get something from a person who will not switch to
  * English, and the model judges whether the phrase actually did work. Those
- * are different evidence and they are not interchangeable — reciting a line
+ * are different evidence and they are not interchangeable. Reciting a line
  * cleanly proves less than using it to be understood.
  */
 export type PhraseOutcome =
@@ -75,7 +75,7 @@ const scheduler = fsrs();
  *
  * An errand only ever reports phrases the player *did* produce, and getting
  * understood without a script is the strongest evidence available that a
- * phrase is genuinely held — so it outranks any recitation. Leaning on
+ * phrase is genuinely held, so it outranks any recitation. Leaning on
  * English for the rest of the turn pulls it back one step: the phrase landed,
  * but it was not carrying the conversation.
  */

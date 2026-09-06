@@ -33,7 +33,7 @@ const nextConfig = {
     // "Unexpected end of JSON input" against a *different* handful of routes
     // each run, on a clean .next, with no dev server, on both Node 22 and 23.
     // The set changing between identical runs points at a race in the build
-    // workers rather than anything in this app's code — disabling module
+    // workers rather than anything in this app's code. Disabling module
     // concatenation makes every run succeed. It costs a little bundle size,
     // which is the right trade for a build that always completes.
     config.optimization = { ...config.optimization, concatenateModules: false };

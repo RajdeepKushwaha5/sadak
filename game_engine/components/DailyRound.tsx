@@ -26,7 +26,7 @@ export type Round = {
 /**
  * Today's walk.
  *
- * Shown once on entering a district with work due, then dismissed — a review
+ * Shown once on entering a district with work due, then dismissed. A review
  * prompt that will not go away is a reason to stop opening the game.
  */
 export default function DailyRound({

@@ -4,7 +4,7 @@ import PhraseReport from "@/components/report/PhraseReport";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "What you can say — sadak",
+  title: "What you can say | sadak",
   description: "Which phrases you still hold, which are fading, and who taught you each one.",
 };
 
@@ -29,7 +29,7 @@ export default function ProgressPage() {
               </h1>
               <p className="max-w-prose text-sm leading-relaxed text-foreground/70">
                 Finishing a district proves you got through it once. This is
-                whether it stuck — scored from how you actually spoke, not from
+                whether it stuck. Scored from how you actually spoke, not from
                 a quiz.
               </p>
             </div>

@@ -11,7 +11,7 @@ export const runtime = "nodejs";
  * What the player can still say, and what has slipped.
  *
  * Finishing a district proves you got through it once. This is the artifact
- * that says whether any of it stuck — the question a tutor, a parent or the
+ * that says whether any of it stuck: the question a tutor, a parent or the
  * learner themselves actually wants answered.
  */
 export async function GET() {

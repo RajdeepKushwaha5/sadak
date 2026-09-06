@@ -78,14 +78,14 @@ sentences you did not know before.
 ### Retention: knowing it next week
 
 Clearing a district proves you got through it once. It says nothing about
-whether you can still say any of it on Tuesday — and an app you finish is not
+whether you can still say any of it on Tuesday, and an app you finish is not
 an app you learn from.
 
 So every spoken line is also a spaced-repetition review. `scoreAttempt`
 already grades each attempt 0-100 against the exact phrase the drill asked
 for; that score feeds [FSRS](https://github.com/open-spaced-repetition/ts-fsrs)
 and schedules the phrase. No quiz, no flashcard deck, nothing extra asked of
-the player — the errand *is* the review.
+the player. The errand *is* the review.
 
 | Score | Grade | Effect |
 | --- | --- | --- |
@@ -102,12 +102,12 @@ sounds play on, so what you hear and what the scheduler does cannot disagree.
 - **A review round that is a walk.** Due phrases resolve to the NPC who
   teaches them, so those NPCs pulse violet on the map. Today's round is three
   or four stops, not a deck. `GET /api/round`
-- **A streak that means something.** Consecutive days a round was *cleared* —
-  never days opened, never partial rounds. Day boundaries use your own
+- **A streak that means something.** Consecutive days a round was *cleared*,
+  never days opened and never partial rounds. Day boundaries use your own
   timezone, so practising at 1am counts for that day.
 - **Difficulty from recall, not map position.** Lesson tier used to come from
   which errand you were standing at. It now comes from what you have actually
-  held (stability >= 7 days) versus what has decayed — nudged one step at
+  held (stability >= 7 days) versus what has decayed, nudged one step at
   most, and only once there are four reviewed phrases to judge on. New players
   see the comfort setting they chose.
 - **A report at `/progress`.** Every phrase as held, fading or lost, with who

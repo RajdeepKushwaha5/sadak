@@ -21,7 +21,7 @@ const STANDING: Record<Standing, { label: string; blurb: string; className: stri
   },
   fading: {
     label: "Fading",
-    blurb: "slipping — worth another round",
+    blurb: "slipping, worth another round",
     className: "border-amber-500/50 text-amber-600 dark:text-amber-400",
   },
   lost: {
@@ -102,7 +102,7 @@ export default function PhraseReport() {
                       <span className="block">{p.roman}</span>
                       <span className="block text-xs text-foreground/50">{p.native}</span>
                     </TableCell>
-                    <TableCell className="text-foreground/70">{p.en || "—"}</TableCell>
+                    <TableCell className="text-foreground/70">{p.en || "-"}</TableCell>
                     <TableCell>
                       <span className={cn("text-sm font-medium", STANDING[p.standing].className)}>
                         {STANDING[p.standing].label}
@@ -114,7 +114,7 @@ export default function PhraseReport() {
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-foreground/70">
-                      {p.retainsDays === null ? "—" : `~${p.retainsDays}d`}
+                      {p.retainsDays === null ? "-" : `~${p.retainsDays}d`}
                     </TableCell>
                     <TableCell className="text-foreground/70">{p.teacher}</TableCell>
                   </TableRow>
