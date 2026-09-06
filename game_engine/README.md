@@ -6,13 +6,19 @@
 
 ### Maha Chori Motor Gaadi
 
-**Four cities. One stolen vehicle in each. Nobody speaks English.**
+**Ten Indian cities. Nobody on the street speaks English.**
 
-A third-person browser game where every NPC is a live Sarvam-powered character
-who speaks, listens and replies only in an Indian language. You walk up, you
-hold space, and you *talk*. The conversation is the gameplay.
+A third-person browser game where every NPC is a live character who speaks,
+listens and replies only in an Indian language. You walk up, you hold space,
+and you *talk*. The conversation is the gameplay.
 
-Built for the Sarvam Epoch Buildathon.
+Then it asks you again next week. Every line you say is scored and scheduled,
+so the game knows which phrases you can still produce and which have slipped,
+and sends you back to the person who taught you the ones you are losing.
+
+Submitted to the **Nerdy AI Hackathon Challenge**, Prompt 02 (Language
+Learning). What was added for it is listed under
+[What was built for this challenge](#what-was-built-for-this-challenge).
 
 ---
 
@@ -219,7 +225,7 @@ npx tsx scripts/run-migrations.ts
 
 Each file runs in its own transaction; anything already present is reported and
 skipped, so it is safe to re-run after adding a migration. To apply them by hand
-instead, paste each file into **SQL Editor** in filename order — `001` creates the
+instead, paste each file into **SQL Editor** in filename order. `001` creates the
 tables everything else references, `002`/`007` seed the districts, and `012`/`013`
 back retention and streaks.
 
@@ -231,7 +237,7 @@ npm run generate:seed-districts   # rewrites 002_seed_districts.sql
 
 Then re-run `002` in the SQL editor (it upserts by district id).
 
-**Lesson NPC voice cache (optional, recommended):** run [`008_tts_storage_bucket.sql`](supabase/migrations/008_tts_storage_bucket.sql) in the SQL editor, then pre-generate static lesson TTS into Supabase Storage (local only — needs `SARVAM_API_KEY` and `SUPABASE_SECRET_KEY` (`sb_secret_…`) in `.env`, never in Vercel):
+**Lesson NPC voice cache (optional, recommended):** run [`008_tts_storage_bucket.sql`](supabase/migrations/008_tts_storage_bucket.sql) in the SQL editor, then pre-generate static lesson TTS into Supabase Storage. Local only, and it needs `SARVAM_API_KEY` plus `SUPABASE_SECRET_KEY` (`sb_secret_…`) in `.env`, never in Vercel:
 
 ```bash
 npm run warm-tts-cache
@@ -273,7 +279,7 @@ fully walkable. Only conversation returns an error.
 | `←` `→` | Turn the camera (mouse also works, click to capture, or drag) |
 | `Shift` | Run |
 | `E` | Talk to a nearby NPC |
-| `Space` *(held)* | Speak, release to send — push-to-talk only |
+| `Space` *(held)* | Speak, release to send. Push-to-talk only |
 | `P` | Phrasebook for this district |
 | `Esc` | Back out: conversation, then pause menu (resume or leave district) |
 
@@ -319,14 +325,36 @@ components/
 - The Indic scripts need real font coverage. Noto Sans Devanagari, Tamil,
   Kannada and Bengali are loaded explicitly rather than left to fallback.
 
+## What was built for this challenge
+
+Nerdy's Prompt 02 asks for a structured language-learning experience built on
+spaced repetition or immersive daily practice, judged on pedagogical design and
+the learner's journey.
+
+SADAK already had the world, the districts, the voice pipeline and the scripted
+drill. What it did not have was any answer to the question that decides whether
+a learning product works: *can you still say it next week?* It tracked cash, XP
+and which errands were finished, and threw away every signal about what the
+player had actually retained.
+
+Everything in this table was added for this challenge:
+
+| Added | What it does |
+| --- | --- |
+| `phrase_memory` + [FSRS](https://github.com/open-spaced-repetition/ts-fsrs) | A retention model per learner, per phrase, graded from how they actually spoke. Migration `012`. |
+| `/api/phrase-review` | Turns each scored line into a review. The errand *is* the review, so there is no flashcard deck. |
+| The errand phase | The drill teaches the lines, then the model judges an unscripted conversation: did you speak the language, answer what was asked, and get what you came for. |
+| `/api/due` + map markers | Due phrases resolve to the NPC who teaches them, so the review queue is a walk through the city. |
+| `/api/round` + streaks | A daily round of up to four stops, most decayed first. Migration `013`. |
+| Adaptive lesson tier | Difficulty from what the learner has retained, replacing a static table indexed by errand number. |
+| `/progress` | Every phrase as held, fading or lost, and who taught it. |
+
 ## Provenance
 
-The world, the districts, the voice pipeline and the drill were built for the
-Sarvam Epoch Buildathon. The retention layer described under *Retention:
-knowing it next week* — `phrase_memory`, FSRS scheduling, `/api/due`,
-`/api/round`, `/api/report`, the daily round and the adaptive lesson tier —
-was built afterwards, and is what turns a campaign you finish into something
-you can still speak a fortnight later.
+The world, the districts, the voice pipeline and the scripted drill were built
+earlier, by a team, for the Sarvam Epoch Buildathon. The retention layer in the
+table above was built afterwards, and is what turns a campaign you finish into
+something you can still speak a fortnight later.
 
 Sibling to [kahani](https://github.com/harshagw/kahani), our AI game studio that
 generates isometric worlds from a text premise. Kahani's Sarvam TTS client is the
