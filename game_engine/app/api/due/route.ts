@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadDistrictById } from "@/lib/game/load-district";
 import { dueNow, rowToMemory, type PhraseMemoryRow } from "@/lib/game/phrase-memory";
 import { groupDueByTask, indexPhraseSites, type DueTask } from "@/lib/game/due";
+import { retentionSignal, type RetentionSignal } from "@/lib/game/adaptive";
 
 export const runtime = "nodejs";
 
@@ -15,6 +16,8 @@ type DueDistrict = {
   dueCount: number;
   tasks: DueTask[];
   unplaced: string[];
+  /** Evidence for choosing lesson difficulty from recall, not errand order. */
+  retention: RetentionSignal;
 };
 
 /**
@@ -42,43 +45,47 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Could not load your review round." }, { status: 500 });
   }
 
-  const due = dueNow((data ?? []).map((row) => rowToMemory(row as PhraseMemoryRow)));
-  if (due.length === 0) {
+  const all = (data ?? []).map((row) => rowToMemory(row as PhraseMemoryRow));
+  if (all.length === 0) {
     return NextResponse.json({ dueCount: 0, districts: [] });
   }
 
-  // Due phrases cluster in the districts already played, so this loads a
-  // handful of packs at most.
-  const byDistrict = new Map<string, typeof due>();
-  for (const memory of due) {
+  // Grouped over *all* history, not just what is due: a district where
+  // everything is still held has no markers to draw but plenty to say about
+  // how hard the next lesson should be.
+  const byDistrict = new Map<string, typeof all>();
+  for (const memory of all) {
     const bucket = byDistrict.get(memory.districtId);
     if (bucket) bucket.push(memory);
     else byDistrict.set(memory.districtId, [memory]);
   }
 
+  const now = new Date();
   const districts: DueDistrict[] = [];
+  let dueCount = 0;
 
   for (const [districtId, memories] of byDistrict) {
     const loaded = await loadDistrictById(districtId);
     if (!loaded) continue;
 
-    const { tasks, unplaced } = groupDueByTask(memories, indexPhraseSites(loaded.tasks));
+    const due = dueNow(memories, now);
+    dueCount += due.length;
+
+    const { tasks, unplaced } = groupDueByTask(due, indexPhraseSites(loaded.tasks));
     districts.push({
       districtId,
       name: loaded.district.name,
       city: loaded.district.city,
       language: loaded.district.language,
       languageLabel: loaded.district.languageLabel,
-      dueCount: memories.length,
+      dueCount: due.length,
       tasks,
       unplaced,
+      retention: retentionSignal(memories, now),
     });
   }
 
   districts.sort((a, b) => b.dueCount - a.dueCount);
 
-  return NextResponse.json({
-    dueCount: due.length,
-    districts,
-  });
+  return NextResponse.json({ dueCount, districts });
 }

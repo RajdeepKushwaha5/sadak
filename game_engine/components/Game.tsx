@@ -7,7 +7,6 @@ import {
   barberTaskFor,
   errandIndexForTask,
   findTaskById,
-  resolveTaskLesson,
   taskAsLessonTarget,
   totalTaskRewardForTasks,
   type DistrictTaskPack,
@@ -19,6 +18,7 @@ import { readStoredBaseLang } from "@/lib/i18n/base-lang";
 import { BARBER_INTERACT_LABEL, BARBER_XP, barberTaskId } from "@/lib/game/barber";
 import type { DistrictProgress } from "@/lib/game/progress";
 import { errandLevelNumber, lessonTierFor } from "@/lib/game/levels";
+import { adaptiveTier, type RetentionSignal } from "@/lib/game/adaptive";
 import { useGameAudio } from "@/lib/audio/useGameAudio";
 import { playSfx } from "@/lib/audio/sfx";
 import Title from "./Title";
@@ -59,6 +59,8 @@ export default function GameShell() {
   const gameRef = useRef<Game | null>(null);
   /** Phrases due for review in this district, from /api/due on load. */
   const [dueCount, setDueCount] = useState(0);
+  /** Recall evidence for this district; null until /api/due answers. */
+  const [retention, setRetention] = useState<RetentionSignal | null>(null);
 
   const [district, setDistrict] = useState<District | null>(null);
   const [tasks, setTasks] = useState<StreetTask[]>([]);
@@ -104,13 +106,16 @@ export default function GameShell() {
       });
     }
     const index = errandIndexForTask(talking.id, tasksMemo);
-    const tier = lessonTierFor(comfort, index);
-    const lesson = resolveTaskLesson(talking, comfort, tasksMemo);
-    return taskAsLessonTarget(talking, lesson, {
+    // Errand order says where you are on the map; retention says what you can
+    // actually hold. Prefer the latter once there is enough of it to trust,
+    // and fall back to the comfort ladder for anyone new.
+    const base = lessonTierFor(comfort, index);
+    const tier = retention ? adaptiveTier(retention, base) : base;
+    return taskAsLessonTarget(talking, talking.lessons[tier], {
       errandLevel: errandLevelNumber(index),
       lessonTier: tier,
     });
-  }, [talking, comfort, tasksMemo]);
+  }, [talking, comfort, tasksMemo, retention]);
 
   const nearbyRef = useRef<string | null>(null);
   const nearBarberRef = useRef(false);
@@ -327,11 +332,18 @@ export default function GameShell() {
       .then((r) => (r.ok ? r.json() : null))
       .then((round) => {
         if (cancelled || !round?.districts?.length) return;
-        const taskIds = round.districts.flatMap((d: { tasks: { taskId: string }[] }) =>
-          d.tasks.map((t) => t.taskId),
+        type RoundDistrict = {
+          districtId: string;
+          dueCount: number;
+          tasks: { taskId: string }[];
+          retention?: RetentionSignal;
+        };
+        const here = (round.districts as RoundDistrict[]).find(
+          (d) => d.districtId === district.id,
         );
-        setDueCount(round.dueCount ?? 0);
-        gameRef.current?.setDue(taskIds);
+        setDueCount(here?.dueCount ?? 0);
+        setRetention(here?.retention ?? null);
+        gameRef.current?.setDue(here?.tasks.map((t) => t.taskId) ?? []);
       })
       .catch(() => {});
 
