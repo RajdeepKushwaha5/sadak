@@ -40,24 +40,49 @@ export type PhraseMemoryRow = {
   due_at: string | null;
 };
 
-/** How a single phrase went in one spoken attempt. */
-export type PhraseOutcome = {
-  phraseNative: string;
-  /** scoreAttempt's 0-100 verdict on the attempt. */
-  points: number;
-};
+/**
+ * How a single phrase went, from one of the two places it can be judged.
+ *
+ * The drill asks the player to repeat a line and scores the sound of it. The
+ * errand asks them to get something from a person who will not switch to
+ * English, and the model judges whether the phrase actually did work. Those
+ * are different evidence and they are not interchangeable — reciting a line
+ * cleanly proves less than using it to be understood.
+ */
+export type PhraseOutcome =
+  | {
+      phraseNative: string;
+      source: "drill";
+      /** scoreAttempt's 0-100 verdict on the attempt. */
+      points: number;
+    }
+  | {
+      phraseNative: string;
+      source: "errand";
+      /** The player reached for English for the substance of the turn. */
+      englishFallback: boolean;
+    };
 
 const scheduler = fsrs();
 
 /**
- * Map a spoken attempt onto an FSRS grade.
+ * Map an attempt onto an FSRS grade.
  *
- * The thresholds are deliberately the same 72/40 bands `scoreAttempt` paints
- * words with and the dialogue plays its success/partial/error sounds on: a
- * player who hears "good" and then watches the phrase come back tomorrow as
- * if they had failed would rightly stop trusting the schedule.
+ * Drill thresholds are deliberately the same 72/40 bands `scoreAttempt`
+ * paints words with and the dialogue plays its success/partial/error sounds
+ * on: a player who hears "good" and then watches the phrase come back
+ * tomorrow as if they had failed would rightly stop trusting the schedule.
+ *
+ * An errand only ever reports phrases the player *did* produce, and getting
+ * understood without a script is the strongest evidence available that a
+ * phrase is genuinely held — so it outranks any recitation. Leaning on
+ * English for the rest of the turn pulls it back one step: the phrase landed,
+ * but it was not carrying the conversation.
  */
 export function gradeFor(outcome: PhraseOutcome): Grade {
+  if (outcome.source === "errand") {
+    return outcome.englishFallback ? Rating.Good : Rating.Easy;
+  }
   if (outcome.points >= 90) return Rating.Easy;
   if (outcome.points >= 72) return Rating.Good;
   if (outcome.points >= 40) return Rating.Hard;

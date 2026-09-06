@@ -28,7 +28,15 @@ import posthog from "posthog-js";
 import { ttsLookupKey } from "@/lib/tts/cache-keys";
 import type { TtsPrefetchMap } from "@/lib/tts/prefetch-client";
 
-type Phase = "recall" | "npc" | "player" | "result" | "finished";
+/**
+ * The drill teaches the lines; the errand is where they have to work.
+ *
+ * Reciting a scripted line proves you can say it. It does not prove you
+ * could get an auto to Bandra with it. `errand` is the transfer test: no
+ * script, a person who will not switch to English, and a model judging
+ * whether you were actually understood.
+ */
+type Phase = "recall" | "npc" | "player" | "result" | "errand" | "finished";
 
 export default function Dialogue({
   district,
@@ -58,6 +66,11 @@ export default function Dialogue({
   const [recallDone, setRecallDone] = useState(!hasPrior);
   const [recallLine, setRecallLine] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>(hasPrior ? "recall" : "npc");
+  const [errandTurns, setErrandTurns] = useState<{ who: "player" | "npc"; text: string }[]>([]);
+  const [errandHint, setErrandHint] = useState<string | null>(null);
+  const [errandBusy, setErrandBusy] = useState(false);
+  const [errandChecks, setErrandChecks] = useState<boolean[]>([]);
+  const [errandUsed, setErrandUsed] = useState<string[]>([]);
   const [attempt, setAttempt] = useState<{
     transcript: string;
     verdicts: WordVerdict[];
@@ -224,18 +237,99 @@ export default function Dialogue({
     };
   }, []);
 
+  const completeEncounter = useCallback(() => {
+    setPhase("finished");
+    if (!finishedRef.current) {
+      finishedRef.current = true;
+      playSfx("success");
+      onComplete(target.id, target.reward);
+    }
+  }, [onComplete, target]);
+
   const advance = useCallback(() => {
     if (stepIndex + 1 >= steps.length) {
-      setPhase("finished");
-      if (!finishedRef.current) {
-        finishedRef.current = true;
-        playSfx("success");
-        onComplete(target.id, target.reward);
-      }
+      // Lines learned. Now use them for something.
+      setPhase("errand");
       return;
     }
     setStepIndex((i) => i + 1);
-  }, [stepIndex, steps.length, onComplete, target]);
+  }, [stepIndex, steps.length]);
+
+  /**
+   * One errand turn: whatever the player said goes to the model, which
+   * replies in character *and* grades the conversation so far.
+   *
+   * Unlike the drill there is no expected string to diff against — the
+   * question is whether the person in front of you understood and acted, so
+   * the model's judgement is the score.
+   */
+  async function sendErrandTurn(playerText: string) {
+    setErrandBusy(true);
+    const transcript = [...errandTurns, { who: "player" as const, text: playerText }];
+    setErrandTurns(transcript);
+
+    try {
+      const res = await fetch("/api/task-talk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          districtId: district.id,
+          taskId: target.id,
+          playerText,
+          transcript: errandTurns,
+          lesson: steps,
+          memory: priorMemory,
+        }),
+      });
+      if (!res.ok) throw new Error("task-talk failed");
+      const g = await res.json();
+
+      setErrandTurns([...transcript, { who: "npc", text: g.reply }]);
+      setErrandHint(g.hint ?? null);
+      setErrandChecks(Array.isArray(g.checks) ? g.checks : []);
+      pushTurn({ role: "user", content: playerText });
+      pushTurn({ role: "assistant", content: g.reply });
+
+      const used: string[] = Array.isArray(g.phrasesUsed) ? g.phrasesUsed : [];
+      if (used.length) {
+        setErrandUsed((prev) => [...new Set([...prev, ...used])]);
+        // Phrases that carried an unscripted exchange are the strongest
+        // evidence of retention the game can gather. Best-effort: a failed
+        // write must not interrupt the conversation.
+        void fetch("/api/phrase-review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            districtId: district.id,
+            lang: district.language,
+            used,
+            englishFallback: g.englishFallback === true,
+          }),
+        }).catch(() => {});
+      }
+
+      posthog.capture("errand_turn_graded", {
+        task_id: target.id,
+        district_language: district.language,
+        turns: transcript.length,
+        checks_passed: (g.checks ?? []).filter(Boolean).length,
+        phrases_used: used.length,
+        english_fallback: g.englishFallback === true,
+        outcome_achieved: g.outcomeAchieved === true,
+      });
+
+      await playAudio(g.reply);
+      if (g.outcomeAchieved === true) {
+        playSfx("success");
+        completeEncounter();
+      }
+    } catch {
+      setErrandHint("Line went quiet. Try that again.");
+      playSfx("error");
+    } finally {
+      setErrandBusy(false);
+    }
+  }
 
   async function onMicUp() {
     if (!voice.recording) return;
@@ -245,6 +339,11 @@ export default function Dialogue({
     if (!transcript) {
       setHeardNothing(true);
       playSfx("error");
+      return;
+    }
+
+    if (phase === "errand") {
+      await sendErrandTurn(transcript);
       return;
     }
 
@@ -463,6 +562,107 @@ export default function Dialogue({
                 </Button>
               )}
             </div>
+          </div>
+        )}
+
+        {phase === "errand" && (
+          <div className="flex flex-col gap-3 border-t-2 border-border px-4 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-heading text-sm">Now do it for real</h3>
+                <p className="mt-0.5 text-xs text-foreground/65">{objectiveBrief}</p>
+              </div>
+              <div className="flex shrink-0 gap-1" aria-label="Errand checks">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    title={
+                      ["Spoke the language", "Answered what was asked", "Got the outcome"][i]
+                    }
+                    className={cn(
+                      "size-2.5 rounded-full border-2 border-border",
+                      errandChecks[i] ? "bg-chart-2" : "bg-secondary-background",
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {errandTurns.length > 0 && (
+              <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-base bg-secondary-background p-2">
+                {errandTurns.map((t, i) => (
+                  <p
+                    key={i}
+                    className={cn(
+                      "text-sm",
+                      t.who === "player" ? "text-foreground/60" : "font-indic",
+                    )}
+                    lang={t.who === "npc" ? district.language : undefined}
+                  >
+                    <span className="text-xs text-foreground/40">
+                      {t.who === "player" ? "You: " : `${target.name}: `}
+                    </span>
+                    {t.text}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {errandHint && (
+              <p className="rounded-base border-2 border-border bg-main/20 px-2 py-1.5 text-xs">
+                {errandHint}
+              </p>
+            )}
+
+            {errandUsed.length > 0 && (
+              <p className="text-xs text-foreground/55">
+                Used so far: {errandUsed.length} of your {stepsGraded} lines
+              </p>
+            )}
+
+            <div className="flex flex-col items-center gap-1.5">
+              <Button
+                type="button"
+                size="icon"
+                className={cn(
+                  "size-16 touch-none select-none text-2xl",
+                  voice.recording && "bg-chart-2 hover:bg-chart-2",
+                )}
+                onMouseDown={() => {
+                  playSfx("tap");
+                  voice.start();
+                }}
+                onMouseUp={onMicUp}
+                onMouseLeave={onMicUp}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  playSfx("tap");
+                  voice.start();
+                }}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  void onMicUp();
+                }}
+                disabled={voice.transcribing || errandBusy || ttsPlaying}
+                aria-label="Hold to speak"
+              >
+                {errandBusy || voice.transcribing ? "···" : voice.recording ? "◉" : "🎙"}
+              </Button>
+              <p className="text-xs text-foreground/50">
+                {errandBusy
+                  ? `${target.name} is thinking…`
+                  : "No script now. Say what you need."}
+              </p>
+            </div>
+
+            {/* The outcome is the model's call, and models are not always
+                persuadable. After a few honest attempts there has to be a way
+                out that does not require faking success. */}
+            {errandTurns.filter((t) => t.who === "player").length >= 5 && (
+              <Button type="button" variant="neutral" size="sm" onClick={onClose}>
+                Leave it for now
+              </Button>
+            )}
           </div>
         )}
 

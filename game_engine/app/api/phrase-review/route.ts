@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { recordPhraseOutcomes } from "@/lib/game/phrase-memory-store";
+import type { PhraseOutcome } from "@/lib/game/phrase-memory";
 
 export const runtime = "nodejs";
 
 type Body = {
   districtId?: string;
   lang?: string;
+  /** Scripted drill lines, scored per word by scoreAttempt. */
   attempts?: { phraseNative?: string; points?: number }[];
+  /** Phrases the model saw the player genuinely use in the errand. */
+  used?: string[];
+  englishFallback?: boolean;
 };
 
 /**
@@ -31,14 +36,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "districtId and lang are required." }, { status: 400 });
   }
 
-  const attempts = (body.attempts ?? []).flatMap((a) => {
+  const outcomes: PhraseOutcome[] = [];
+
+  for (const a of body.attempts ?? []) {
     const phraseNative = a.phraseNative?.trim();
-    if (!phraseNative || typeof a.points !== "number" || !Number.isFinite(a.points)) return [];
-    return [{ phraseNative, points: Math.max(0, Math.min(100, a.points)) }];
-  });
+    if (!phraseNative || typeof a.points !== "number" || !Number.isFinite(a.points)) continue;
+    outcomes.push({
+      phraseNative,
+      source: "drill",
+      points: Math.max(0, Math.min(100, a.points)),
+    });
+  }
 
-  if (attempts.length === 0) return NextResponse.json({ recorded: 0 });
+  // The errand reports only what the player actually produced, so there is no
+  // score to carry: being understood without a script is the judgement.
+  const englishFallback = body.englishFallback === true;
+  for (const raw of body.used ?? []) {
+    const phraseNative = typeof raw === "string" ? raw.trim() : "";
+    if (!phraseNative) continue;
+    outcomes.push({ phraseNative, source: "errand", englishFallback });
+  }
 
-  await recordPhraseOutcomes(attempts, { districtId, lang });
-  return NextResponse.json({ recorded: attempts.length });
+  if (outcomes.length === 0) return NextResponse.json({ recorded: 0 });
+
+  await recordPhraseOutcomes(outcomes, { districtId, lang });
+  return NextResponse.json({ recorded: outcomes.length });
 }

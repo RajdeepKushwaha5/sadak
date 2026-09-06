@@ -28,6 +28,16 @@ const nextConfig = {
     // './638.js'", or truncated bundles. Keeping the dev cache in memory costs
     // a slightly slower cold start and removes the whole class of failure.
     if (dev) config.cache = { type: "memory" };
+
+    // Scope hoisting fails here non-deterministically: `next build` reports
+    // "Unexpected end of JSON input" against a *different* handful of routes
+    // each run, on a clean .next, with no dev server, on both Node 22 and 23.
+    // The set changing between identical runs points at a race in the build
+    // workers rather than anything in this app's code — disabling module
+    // concatenation makes every run succeed. It costs a little bundle size,
+    // which is the right trade for a build that always completes.
+    config.optimization = { ...config.optimization, concatenateModules: false };
+
     return config;
   },
 };
