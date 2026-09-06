@@ -11,3 +11,5 @@ __pycache__/
 .claude
 .env*
 !.env.example
+hack-tips.md
+hackathon-info.md
