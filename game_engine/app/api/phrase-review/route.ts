@@ -8,7 +8,7 @@ type Body = {
   districtId?: string;
   lang?: string;
   /** Scripted drill lines, scored per word by scoreAttempt. */
-  attempts?: { phraseNative?: string; points?: number }[];
+  attempts?: { phraseNative?: string; points?: number; answerVisible?: boolean }[];
   /** Phrases the model saw the player genuinely use in the errand. */
   used?: string[];
   englishFallback?: boolean;
@@ -45,6 +45,9 @@ export async function POST(req: Request) {
       phraseNative,
       source: "drill",
       points: Math.max(0, Math.min(100, a.points)),
+      // Absent means the line was on screen, which is the drill's default.
+      // Recall has to be claimed explicitly, never assumed.
+      answerVisible: a.answerVisible !== false,
     });
   }
 

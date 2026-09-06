@@ -53,8 +53,10 @@ export type PhraseOutcome =
   | {
       phraseNative: string;
       source: "drill";
-      /** scoreAttempt's 0-100 verdict on the attempt. */
+      /** scoreAttempt's 0-100 verdict on how closely the words matched. */
       points: number;
+      /** The line was on screen while they spoke: they read it, not recalled it. */
+      answerVisible: boolean;
     }
   | {
       phraseNative: string;
@@ -68,23 +70,31 @@ const scheduler = fsrs();
 /**
  * Map an attempt onto an FSRS grade.
  *
- * Drill thresholds are deliberately the same 72/40 bands `scoreAttempt`
- * paints words with and the dialogue plays its success/partial/error sounds
- * on: a player who hears "good" and then watches the phrase come back
- * tomorrow as if they had failed would rightly stop trusting the schedule.
+ * The scheduler is trying to predict whether a phrase can be produced from
+ * memory on some later day. Reading a sentence off the screen answers a
+ * different question, so it must not be able to reach the top grade however
+ * cleanly it is read: an answer-visible attempt is capped at Hard, which
+ * keeps the phrase in rotation until it has been produced unaided.
  *
- * An errand only ever reports phrases the player *did* produce, and getting
- * understood without a script is the strongest evidence available that a
- * phrase is genuinely held, so it outranks any recitation. Leaning on
- * English for the rest of the turn pulls it back one step: the phrase landed,
- * but it was not carrying the conversation.
+ * The 72/40 bands are deliberately the same ones `scoreAttempt` paints words
+ * with and the dialogue plays its success/partial/error sounds on. A player
+ * who hears "good" and then watches the phrase come back tomorrow as if they
+ * had failed would rightly stop trusting the schedule.
+ *
+ * An errand only ever reports phrases the player *did* produce, unprompted,
+ * in an unscripted exchange. That is the strongest evidence available that a
+ * phrase is genuinely held, so it outranks any recitation. Leaning on English
+ * for the rest of the turn pulls it back one step: the phrase landed, but it
+ * was not carrying the conversation.
  */
 export function gradeFor(outcome: PhraseOutcome): Grade {
   if (outcome.source === "errand") {
     return outcome.englishFallback ? Rating.Good : Rating.Easy;
   }
-  if (outcome.points >= 90) return Rating.Easy;
-  if (outcome.points >= 72) return Rating.Good;
+
+  const unaided = !outcome.answerVisible;
+  if (outcome.points >= 90) return unaided ? Rating.Easy : Rating.Hard;
+  if (outcome.points >= 72) return unaided ? Rating.Good : Rating.Hard;
   if (outcome.points >= 40) return Rating.Hard;
   return Rating.Again;
 }

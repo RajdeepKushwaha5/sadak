@@ -29,8 +29,8 @@ export default function ProgressPage() {
               </h1>
               <p className="max-w-prose text-sm leading-relaxed text-foreground/70">
                 Finishing a district proves you got through it once. This is
-                whether it stuck. Scored from how you actually spoke, not from
-                a quiz.
+                what the review schedule makes of it, built from the lines you
+                actually said rather than from a quiz.
               </p>
             </div>
           </div>

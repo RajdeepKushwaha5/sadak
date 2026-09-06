@@ -47,7 +47,7 @@ export const UI_KEY_TO_ENGLISH: Record<UiKey, string> = {
   speaking: "🔊 speaking…",
   level: "Level",
   words: "words",
-  linesScored: "lines scored · average accuracy",
+  linesScored: "lines practised · average phrase match",
   hearPronunciation: "Hear correct pronunciation",
   playingPronunciation: "Playing pronunciation",
   close: "Close",

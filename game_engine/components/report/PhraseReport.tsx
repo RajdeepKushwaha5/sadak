@@ -13,23 +13,34 @@ import {
 import { cn } from "@/lib/utils";
 import type { DistrictReport, Standing } from "@/lib/game/report";
 
+/**
+ * Labels describe what the schedule predicts, not what the learner is.
+ *
+ * "Lost" and "you could say this cold" claimed more than the data supports:
+ * these are a scheduler's estimates from a handful of attempts, so they are
+ * phrased as review states rather than verdicts on the person.
+ */
 const STANDING: Record<Standing, { label: string; blurb: string; className: string }> = {
   held: {
-    label: "Held",
-    blurb: "you could say this cold",
+    label: "Holding",
+    blurb: "recalled without help, not due yet",
     className: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400",
   },
   fading: {
-    label: "Fading",
-    blurb: "slipping, worth another round",
+    label: "Due soon",
+    blurb: "practised with support, worth another round",
     className: "border-amber-500/50 text-amber-600 dark:text-amber-400",
   },
   lost: {
-    label: "Lost",
-    blurb: "gone; needs re-teaching, not a reminder",
+    label: "Due for review",
+    blurb: "overdue and never held on its own",
     className: "border-rose-500/50 text-rose-600 dark:text-rose-400",
   },
-  new: { label: "New", blurb: "not yet tested", className: "border-border text-foreground/60" },
+  new: {
+    label: "Not yet reviewed",
+    blurb: "no attempt recorded",
+    className: "border-border text-foreground/60",
+  },
 };
 
 const ORDER: Standing[] = ["held", "fading", "lost", "new"];
@@ -91,7 +102,7 @@ export default function PhraseReport() {
                   <TableHead>Phrase</TableHead>
                   <TableHead>Meaning</TableHead>
                   <TableHead>Standing</TableHead>
-                  <TableHead className="whitespace-nowrap">Holds for</TableHead>
+                  <TableHead className="whitespace-nowrap">Next review</TableHead>
                   <TableHead>Learned from</TableHead>
                 </TableRow>
               </TableHeader>
@@ -114,7 +125,7 @@ export default function PhraseReport() {
                       )}
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-foreground/70">
-                      {p.retainsDays === null ? "-" : `~${p.retainsDays}d`}
+                      {p.retainsDays === null ? "-" : `in ~${p.retainsDays}d`}
                     </TableCell>
                     <TableCell className="text-foreground/70">{p.teacher}</TableCell>
                   </TableRow>

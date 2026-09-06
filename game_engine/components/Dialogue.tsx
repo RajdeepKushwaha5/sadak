@@ -7,6 +7,7 @@ import type { NpcTurn } from "@/lib/game/npc-memory";
 import type { LessonTarget } from "@/lib/game/tasks";
 import { useVoice } from "@/lib/useVoice";
 import { scoreAttempt, type WordVerdict } from "@/lib/game/speech-score";
+import { looksLikeTargetScript } from "@/lib/game/prompt";
 import { playSfx } from "@/lib/audio/sfx";
 import {
   Dialog,
@@ -79,6 +80,9 @@ export default function Dialogue({
   const [heardNothing, setHeardNothing] = useState(false);
   const [totalPoints, setTotalPoints] = useState(0);
   const [gradedCount, setGradedCount] = useState(0);
+  /** Steps where a first attempt was waved through as a probable mishearing. */
+  const [retryOffered, setRetryOffered] = useState<Set<number>>(new Set());
+  const [misheard, setMisheard] = useState(false);
   const [npcSpeaking, setNpcSpeaking] = useState(false);
   const [ttsPlaying, setTtsPlaying] = useState(false);
 
@@ -349,6 +353,29 @@ export default function Dialogue({
 
     pushTurn({ role: "user", content: transcript });
     const scored = scoreAttempt(step.prompt.native, transcript);
+
+    // Sarvam returns no confidence, so a mishearing has to be inferred. A
+    // transcript that is not even in the target script, or that matched
+    // nothing at all, is far more often a bad capture than a learner who has
+    // genuinely lost the phrase. Waving the first one through costs a retry;
+    // recording it costs a lapse on their schedule for something they may
+    // well have said correctly.
+    const offScript = !looksLikeTargetScript(transcript, district.script);
+    const probableMishear = scored.points < 40 && (offScript || scored.points === 0);
+    if (probableMishear && !retryOffered.has(stepIndex)) {
+      setRetryOffered((prev) => new Set(prev).add(stepIndex));
+      setMisheard(true);
+      playSfx("error");
+      posthog.capture("attempt_retry_offered", {
+        task_id: target.id,
+        step_index: stepIndex,
+        points: scored.points,
+        off_script: offScript,
+      });
+      return;
+    }
+    setMisheard(false);
+
     setAttempt({ transcript, verdicts: scored.verdicts, points: scored.points });
     if (scored.points > 0) {
       setTotalPoints((p) => p + scored.points);
@@ -373,7 +400,13 @@ export default function Dialogue({
       body: JSON.stringify({
         districtId: district.id,
         lang: district.language,
-        attempts: [{ phraseNative: step.prompt.native, points: scored.points }],
+        attempts: [
+          {
+            phraseNative: step.prompt.native,
+            points: scored.points,
+            answerVisible: true,
+          },
+        ],
       }),
     }).catch(() => {});
     setPhase("result");
@@ -688,6 +721,12 @@ export default function Dialogue({
 
         {phase === "player" && (
           <div className="flex flex-col items-center gap-2 border-t-2 border-border px-4 py-4">
+            {misheard && (
+              <p className="rounded-base border-2 border-border bg-main/20 px-2 py-1.5 text-center text-xs">
+                That did not come through clearly. Say it once more, this one
+                will not count against you.
+              </p>
+            )}
             <Button
               type="button"
               size="icon"

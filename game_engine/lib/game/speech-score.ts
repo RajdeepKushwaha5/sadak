@@ -1,6 +1,12 @@
 /**
- * Word-level scoring for the language lesson: how close was what the player
- * said to the line they were shown?
+ * Phrase match for the language lesson: how much of the expected line came
+ * back in the transcript?
+ *
+ * This is a string comparison against what the recogniser heard, so it is a
+ * measure of *words matched*, not of pronunciation. A learner with a heavy
+ * accent whom Saaras transcribes correctly scores full marks, and a perfect
+ * speaker whom it mishears scores badly. Call it phrase match wherever it is
+ * shown, and never treat a single low score as proof a phrase was forgotten.
  *
  * STT hands back native-script text, the prompt is authored native + roman
  * side by side (word-aligned), so we diff against the native line and paint
