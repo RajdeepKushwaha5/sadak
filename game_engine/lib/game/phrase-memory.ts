@@ -8,10 +8,10 @@ import {
 } from "ts-fsrs";
 
 /**
- * Per-phrase retention state. The conversation grader in /api/task-talk
- * already decides, every turn, whether the player produced a target phrase
- * and whether they needed help to do it. That verdict is a review grade — so
- * the errand *is* the review, and nothing extra has to be asked of the player.
+ * Per-phrase retention state. Every drill line is already scored by
+ * `scoreAttempt` against the exact phrase the player was asked to say, so
+ * that score is a review grade — the errand *is* the review, and nothing
+ * extra has to be asked of the player.
  */
 export type PhraseMemory = {
   phraseNative: string;
@@ -40,28 +40,28 @@ export type PhraseMemoryRow = {
   due_at: string | null;
 };
 
-/** How a single phrase went in one conversation turn. */
+/** How a single phrase went in one spoken attempt. */
 export type PhraseOutcome = {
   phraseNative: string;
-  /** The player produced it without the hint being on screen. */
-  unaided: boolean;
-  /** The player fell back to English on this turn. */
-  englishFallback: boolean;
+  /** scoreAttempt's 0-100 verdict on the attempt. */
+  points: number;
 };
 
 const scheduler = fsrs();
 
 /**
- * Map what the grader observed onto an FSRS grade.
+ * Map a spoken attempt onto an FSRS grade.
  *
- * Falling back to English is a lapse even if the phrase appeared somewhere in
- * the turn: reaching for English is the signal that the phrase was not
- * available. Producing it only after reading the hint is recognition, not
- * recall, which is exactly what Hard means.
+ * The thresholds are deliberately the same 72/40 bands `scoreAttempt` paints
+ * words with and the dialogue plays its success/partial/error sounds on: a
+ * player who hears "good" and then watches the phrase come back tomorrow as
+ * if they had failed would rightly stop trusting the schedule.
  */
 export function gradeFor(outcome: PhraseOutcome): Grade {
-  if (outcome.englishFallback) return Rating.Again;
-  return outcome.unaided ? Rating.Good : Rating.Hard;
+  if (outcome.points >= 90) return Rating.Easy;
+  if (outcome.points >= 72) return Rating.Good;
+  if (outcome.points >= 40) return Rating.Hard;
+  return Rating.Again;
 }
 
 function toCard(memory: PhraseMemory | null, now: Date): Card {

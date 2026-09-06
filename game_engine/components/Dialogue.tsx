@@ -264,6 +264,19 @@ export default function Dialogue({
       word_count: scored.verdicts.length,
       green_words: scored.verdicts.filter((v) => v === "green").length,
     });
+    // The same score drives the spaced-repetition schedule, so a line said
+    // well comes back later and one fumbled comes back sooner. Best-effort:
+    // the drill must not stall on a failed write, and signed-out play simply
+    // records nothing.
+    void fetch("/api/phrase-review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        districtId: district.id,
+        lang: district.language,
+        attempts: [{ phraseNative: step.prompt.native, points: scored.points }],
+      }),
+    }).catch(() => {});
     setPhase("result");
     // Three-band feedback so the player hears how they did, not just sees it.
     if (scored.points >= 72) playSfx("success");

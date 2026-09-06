@@ -5,7 +5,6 @@ import { taskTalkSystemPrompt } from "@/lib/game/task-conversation";
 import type { LessonStep } from "@/lib/game/districts";
 import type { NpcTurn } from "@/lib/game/npc-memory";
 import { getPostHogClient } from "@/lib/posthog-server";
-import { recordPhraseOutcomes } from "@/lib/game/phrase-memory-store";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,8 +19,6 @@ type Body = {
   transcript?: Turn[];
   /** Tier lesson used for phrase targets and difficulty hints. */
   lesson?: LessonStep[];
-  /** Whether the hint was on screen when the player spoke: recall vs recognition. */
-  hintShown?: boolean;
   memory?: NpcTurn[];
 };
 
@@ -136,21 +133,6 @@ export async function POST(req: Request) {
   const graded = parse(raw, checkCount);
   const playerTurns = transcript.filter((t) => t.who === "player").length + (playerText ? 1 : 0);
   const outcomeAchieved = graded.outcomeAchieved && playerTurns >= 1;
-
-  // The grader has already decided which target phrases the player produced
-  // and whether they reached for English. That is a review grade, so the
-  // errand doubles as a spaced-repetition review with nothing extra asked of
-  // the player. Retention must never break the conversation: log and move on.
-  if (!isOpening && graded.phrasesUsed.length > 0) {
-    void recordPhraseOutcomes(
-      graded.phrasesUsed.map((phraseNative) => ({
-        phraseNative,
-        unaided: body.hintShown !== true,
-        englishFallback: graded.englishFallback,
-      })),
-      { districtId: district.id, lang: district.language },
-    ).catch((err) => console.error("recordPhraseOutcomes failed", err));
-  }
 
   if (outcomeAchieved) {
     const posthog = getPostHogClient();
