@@ -117,14 +117,27 @@ export default function LoginForm() {
 
   return (
     <div className="w-full max-w-md">
-      <div className="flex items-baseline gap-2">
+      {/* The name is the first vocabulary item: a dictionary entry, so anyone
+          who cannot read Devanagari still learns to say it and knows what it
+          means before they have signed in. */}
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
         <span className="font-indic text-2xl font-heading" lang="hi">
           सड़क
         </span>
         <h1 className="text-3xl font-heading tracking-tight">sadak</h1>
+        <span className="text-sm text-foreground/45">/sə·ɽək/</span>
+        <span className="text-sm italic text-foreground/45">noun</span>
       </div>
-      <p className="mt-3 text-sm text-foreground/70">
-        A third-person street across ten Indian languages. Sign in to walk it.
+      <p className="mt-1.5 text-sm text-foreground/70">
+        <span className="font-medium text-foreground">road, street</span>
+        <span className="text-foreground/45"> · Hindi</span>
+      </p>
+
+      <p className="mt-4 text-sm leading-relaxed text-foreground/70">
+        Ten Indian cities. Nobody on the street speaks English, and the only way
+        past them is to say the thing yourself. Say it well enough and the game
+        remembers — then asks for it again a week later, when you have started
+        to forget.
       </p>
 
       {authError ? (
