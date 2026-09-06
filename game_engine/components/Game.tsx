@@ -57,6 +57,8 @@ const ENTER_DWELL_MS = 2600;
 export default function GameShell() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gameRef = useRef<Game | null>(null);
+  /** Phrases due for review in this district, from /api/due on load. */
+  const [dueCount, setDueCount] = useState(0);
 
   const [district, setDistrict] = useState<District | null>(null);
   const [tasks, setTasks] = useState<StreetTask[]>([]);
@@ -317,7 +319,24 @@ export default function GameShell() {
     }
     game.start();
 
+    // Phrases fall due between sessions, so the round is only knowable on
+    // load. Failing to fetch it just means no violet markers — never a
+    // blocked game — so this stays a best-effort side call.
+    let cancelled = false;
+    void fetch(`/api/due?districtId=${encodeURIComponent(district.id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((round) => {
+        if (cancelled || !round?.districts?.length) return;
+        const taskIds = round.districts.flatMap((d: { tasks: { taskId: string }[] }) =>
+          d.tasks.map((t) => t.taskId),
+        );
+        setDueCount(round.dueCount ?? 0);
+        gameRef.current?.setDue(taskIds);
+      })
+      .catch(() => {});
+
     return () => {
+      cancelled = true;
       game.dispose();
       gameRef.current = null;
       setLive(null);
@@ -573,6 +592,7 @@ export default function GameShell() {
         artifacts={artifacts}
         completed={completed}
         errandProgress={{ done: errandsDone, total: tasks.length }}
+        dueCount={dueCount}
         onOpen={openTalk}
         barberNearby={Boolean(tel?.nearBarber && !tel?.nearby)}
         barberLabel={BARBER_INTERACT_LABEL}

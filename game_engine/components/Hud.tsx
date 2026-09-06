@@ -404,6 +404,7 @@ export default function Hud({
   artifacts,
   completed,
   errandProgress,
+  dueCount = 0,
   onOpen,
   barberNearby = false,
   barberLabel = "Enter barber shop",
@@ -429,6 +430,8 @@ export default function Hud({
   artifacts: string[];
   completed: Set<string>;
   errandProgress: { done: number; total: number };
+  /** Phrases in this district whose recall has decayed past due. */
+  dueCount?: number;
   onOpen: () => void;
   barberNearby?: boolean;
   barberLabel?: string;
@@ -463,6 +466,15 @@ export default function Hud({
               : `${errandProgress.total - errandProgress.done} left`}
           </span>
         </div>
+      )}
+      {dueCount > 0 && (
+        <Badge
+          variant="neutral"
+          className={`border-[#b06be8]/50 text-[#b06be8] ${mobilePlay ? "text-xs" : ""}`}
+          title="Phrases you have started to forget. The violet markers show who to say them to."
+        >
+          {dueCount} to revise
+        </Badge>
       )}
     </>
   );

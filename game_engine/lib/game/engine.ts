@@ -376,6 +376,8 @@ export class Game {
   private disposed = false;
   private dragging = false;
   private done = new Set<string>();
+  /** Tasks holding a phrase whose recall has decayed past due. */
+  private due = new Set<string>();
   private canvas: HTMLCanvasElement;
 
   /** Set while a dialogue overlay is open, so input is ignored. */
@@ -933,10 +935,18 @@ export class Game {
 
     for (const [id, m] of this.markers) {
       const done = this.done.has(id);
-      const colour = done
-        ? 0x2ecc71
-        : markerColourForKind(this.tasks.find((tk) => tk.id === id)?.kind ?? "auto");
-      const pulse = 0.5 + Math.sin(t * 2.8) * 0.12;
+      // Revision outranks completion: an errand you finished last week is
+      // exactly the one worth walking back to once the phrase has faded.
+      const revising = this.due.has(id);
+      const colour = revising
+        ? 0xb06be8
+        : done
+          ? 0x2ecc71
+          : markerColourForKind(this.tasks.find((tk) => tk.id === id)?.kind ?? "auto");
+      // Due markers breathe faster so a review round reads at a glance.
+      const pulse = revising
+        ? 0.62 + Math.sin(t * 4.6) * 0.2
+        : 0.5 + Math.sin(t * 2.8) * 0.12;
 
       const ring = m.userData.blipRing as THREE.Mesh | undefined;
       const core = m.userData.blipCore as THREE.Mesh | undefined;
@@ -1378,6 +1388,11 @@ export class Game {
   /** Position readout, used by the headless end-to-end checks to navigate. */
   public get debugState() {
     return { x: this.playerPos.x, z: this.playerPos.z, yaw: this.yaw };
+  }
+
+  /** Phrases fall due between sessions, so this is set from /api/due on load. */
+  public setDue(taskIds: string[]) {
+    this.due = new Set(taskIds);
   }
 
   public markDone(npcId: string) {
