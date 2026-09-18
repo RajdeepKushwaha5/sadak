@@ -8,6 +8,7 @@ import type { LessonTarget } from "@/lib/game/tasks";
 import { useVoice } from "@/lib/useVoice";
 import { scoreAttempt, type WordVerdict } from "@/lib/game/speech-score";
 import { looksLikeTargetScript } from "@/lib/game/prompt";
+import { phraseKey } from "@/lib/game/due";
 import { playSfx } from "@/lib/audio/sfx";
 import {
   Dialog,
@@ -28,6 +29,29 @@ import { cn } from "@/lib/utils";
 import posthog from "posthog-js";
 import { ttsLookupKey } from "@/lib/tts/cache-keys";
 import type { TtsPrefetchMap } from "@/lib/tts/prefetch-client";
+
+/**
+ * Send attempts to the review schedule, retrying once if the server failed.
+ *
+ * The drill and the errand must never wait on this, so callers fire and
+ * forget. But a transient failure should not quietly lose a learner's
+ * evidence either, so a 5xx or network error gets one more try after a short
+ * pause. A 401 is final: signed-out play records nothing by design.
+ */
+async function saveReview(body: unknown, attempt = 0): Promise<void> {
+  try {
+    const res = await fetch("/api/phrase-review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok || res.status < 500 || attempt > 0) return;
+  } catch {
+    if (attempt > 0) return;
+  }
+  await new Promise((r) => setTimeout(r, 1500));
+  return saveReview(body, attempt + 1);
+}
 
 /**
  * The drill teaches the lines; the errand is where they have to work.
@@ -308,21 +332,26 @@ export default function Dialogue({
       // review per errand, on the turn it first appears; crediting it again
       // would tell the scheduler it had been recalled several times when it
       // was said once.
-      const fresh = used.filter((p) => !creditedRef.current.has(p));
-      for (const p of fresh) creditedRef.current.add(p);
+      // Keyed on the normalised phrase and marked as each one is taken, so the
+      // same line returned twice in one response, or with different
+      // punctuation, is credited once. The server maps whatever survives onto
+      // the exact lesson line and drops anything that is not one.
+      const fresh: string[] = [];
+      for (const p of used) {
+        const key = phraseKey(p);
+        if (!key || creditedRef.current.has(key)) continue;
+        creditedRef.current.add(key);
+        fresh.push(p);
+      }
       if (fresh.length) {
         setErrandUsed((prev) => [...prev, ...fresh]);
         // Best-effort: a failed write must not interrupt the conversation.
-        void fetch("/api/phrase-review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            districtId: district.id,
-            lang: district.language,
-            used: fresh,
-            englishFallback: g.englishFallback === true,
-          }),
-        }).catch(() => {});
+        void saveReview({
+          districtId: district.id,
+          lang: district.language,
+          used: fresh,
+          englishFallback: g.englishFallback === true,
+        });
       }
 
       posthog.capture("errand_turn_graded", {
@@ -407,21 +436,17 @@ export default function Dialogue({
     // well comes back later and one fumbled comes back sooner. Best-effort:
     // the drill must not stall on a failed write, and signed-out play simply
     // records nothing.
-    void fetch("/api/phrase-review", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        districtId: district.id,
-        lang: district.language,
-        attempts: [
-          {
-            phraseNative: step.prompt.native,
-            points: scored.points,
-            answerVisible: true,
-          },
-        ],
-      }),
-    }).catch(() => {});
+    void saveReview({
+      districtId: district.id,
+      lang: district.language,
+      attempts: [
+        {
+          phraseNative: step.prompt.native,
+          points: scored.points,
+          answerVisible: true,
+        },
+      ],
+    });
     setPhase("result");
     // Three-band feedback so the player hears how they did, not just sees it.
     if (scored.points >= 72) playSfx("success");
@@ -725,24 +750,24 @@ export default function Dialogue({
                 <span aria-hidden>{errandFallbackTurns === 0 ? "✓" : "·"}</span>
                 <span>
                   {errandFallbackTurns === 0
-                    ? `Held the conversation in ${district.languageLabel}, no English`
-                    : `Switched to English on ${errandFallbackTurns} turn${errandFallbackTurns === 1 ? "" : "s"}`}
+                    ? "No English fallback detected"
+                    : `English fallback detected on ${errandFallbackTurns} turn${errandFallbackTurns === 1 ? "" : "s"}`}
                 </span>
               </li>
               <li className="flex gap-2">
                 <span aria-hidden>{errandHintsSeen === 0 ? "✓" : "·"}</span>
                 <span>
                   {errandHintsSeen === 0
-                    ? "Got there without a hint"
-                    : `Needed ${errandHintsSeen} hint${errandHintsSeen === 1 ? "" : "s"} from ${target.name}`}
+                    ? "No hints shown"
+                    : `${errandHintsSeen} hint${errandHintsSeen === 1 ? "" : "s"} shown by ${target.name}`}
                 </span>
               </li>
               {errandUsed.length > 0 && (
                 <li className="flex gap-2">
                   <span aria-hidden>✓</span>
                   <span>
-                    Used {errandUsed.length} of the {stepsGraded} practised line
-                    {stepsGraded === 1 ? "" : "s"} without the script
+                    {errandUsed.length} practised line{errandUsed.length === 1 ? "" : "s"} recognised
+                    in the unscripted conversation
                   </span>
                 </li>
               )}
@@ -750,8 +775,8 @@ export default function Dialogue({
                 <li className="flex gap-2">
                   <span aria-hidden>·</span>
                   <span>
-                    {retryOffered.size} drill line{retryOffered.size === 1 ? " was" : "s were"} not
-                    heard clearly and got a free retry
+                    {retryOffered.size} retr{retryOffered.size === 1 ? "y" : "ies"} offered after a
+                    possible recognition error
                   </span>
                 </li>
               )}

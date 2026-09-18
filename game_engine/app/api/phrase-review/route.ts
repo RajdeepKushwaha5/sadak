@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { recordPhraseOutcomes } from "@/lib/game/phrase-memory-store";
 import type { PhraseOutcome } from "@/lib/game/phrase-memory";
+import { loadDistrictById } from "@/lib/game/load-district";
+import { barberTaskFor } from "@/lib/game/tasks";
+import { canonicalPhraseIndex, phraseKey } from "@/lib/game/due";
 
 export const runtime = "nodejs";
 
@@ -36,11 +39,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "districtId and lang are required." }, { status: 400 });
   }
 
+  const loaded = await loadDistrictById(districtId);
+  if (!loaded) return NextResponse.json({ error: "Unknown district." }, { status: 404 });
+  // The optional barber lives outside the stored pack but still teaches lines.
+  const canonical = canonicalPhraseIndex([...loaded.tasks, barberTaskFor(districtId)]);
+  const resolve = (text: unknown) =>
+    typeof text === "string" ? canonical.get(phraseKey(text)) ?? null : null;
+
   const outcomes: PhraseOutcome[] = [];
+  let dropped = 0;
 
   for (const a of body.attempts ?? []) {
-    const phraseNative = a.phraseNative?.trim();
-    if (!phraseNative || typeof a.points !== "number" || !Number.isFinite(a.points)) continue;
+    const phraseNative = resolve(a.phraseNative);
+    if (!phraseNative || typeof a.points !== "number" || !Number.isFinite(a.points)) {
+      dropped += 1;
+      continue;
+    }
     outcomes.push({
       phraseNative,
       source: "drill",
@@ -52,16 +66,27 @@ export async function POST(req: Request) {
   }
 
   // The errand reports only what the player actually produced, so there is no
-  // score to carry: being understood without a script is the judgement.
+  // score to carry: being understood without a script is the judgement. Each
+  // lesson line counts once per request however many times it was reported.
   const englishFallback = body.englishFallback === true;
+  const seen = new Set<string>();
   for (const raw of body.used ?? []) {
-    const phraseNative = typeof raw === "string" ? raw.trim() : "";
-    if (!phraseNative) continue;
+    const phraseNative = resolve(raw);
+    if (!phraseNative) {
+      dropped += 1;
+      continue;
+    }
+    if (seen.has(phraseNative)) continue;
+    seen.add(phraseNative);
     outcomes.push({ phraseNative, source: "errand", englishFallback });
   }
 
-  if (outcomes.length === 0) return NextResponse.json({ recorded: 0 });
+  if (outcomes.length === 0) return NextResponse.json({ recorded: 0, dropped });
 
-  await recordPhraseOutcomes(outcomes, { districtId, lang });
-  return NextResponse.json({ recorded: outcomes.length });
+  const result = await recordPhraseOutcomes(outcomes, { districtId, lang });
+  if (!result.ok) {
+    const status = result.reason === "signed-out" ? 401 : 500;
+    return NextResponse.json({ recorded: 0, dropped, error: result.reason }, { status });
+  }
+  return NextResponse.json({ recorded: result.recorded, dropped });
 }

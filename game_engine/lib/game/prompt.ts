@@ -52,6 +52,37 @@ export function looksLikeTargetScript(text: string, script: string): boolean {
   return pattern.test(text);
 }
 
+/**
+ * Share of the letters in `text` that are in the target script, 0 to 1.
+ *
+ * `looksLikeTargetScript` passes on a single matching character, so
+ * "Please take me to the station अ" counts as Hindi. For gating anything
+ * that matters, ask whether the *bulk* of the utterance is in the script.
+ * Digits, spaces and punctuation are ignored. Loanwords matter in short
+ * sentences: "भैया auto station चलोगे?" scores 0.45 while "Please take me to
+ * the station अ" scores 0.04, so callers should gate around 0.4 rather than
+ * at a majority.
+ *
+ * This is a supporting signal, not proof of language: romanised Hindi scores
+ * zero, and a sentence can be in the right script and still say nothing
+ * useful. It is combined with the grader's judgement, never used alone.
+ */
+export function targetScriptShare(text: string, script: string): number {
+  const pattern = SCRIPT_RANGES[script];
+  if (!pattern) return 1;
+  let letters = 0;
+  let inScript = 0;
+  for (const ch of text) {
+    if (pattern.test(ch)) {
+      inScript += 1;
+      letters += 1;
+    } else if (/\p{L}/u.test(ch)) {
+      letters += 1;
+    }
+  }
+  return letters === 0 ? 0 : inScript / letters;
+}
+
 /** Prior exchanges with this NPC during the current district visit. */
 export function memoryBlock(turns: NpcTurn[]): string {
   if (!turns.length) return "";

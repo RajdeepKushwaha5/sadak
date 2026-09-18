@@ -22,9 +22,14 @@ function Panel() {
         body: JSON.stringify({ days, streakDays, tzOffset: new Date().getTimezoneOffset() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed");
+      if (!res.ok) {
+        throw new Error(
+          `Not applied: ${data.error ?? "failed"}` +
+            (typeof data.of === "number" ? ` (${data.phrases ?? 0} of ${data.of} phrases moved)` : ""),
+        );
+      }
       setStatus(
-        `Simulated ${data.shiftedDays} days passing for ${data.phrases} phrase(s)` +
+        `Simulated ${data.shiftedDays} days passing for ${data.phrases} of ${data.of} phrase(s)` +
           (data.streak ? `, with a ${data.streak}-day streak ending yesterday.` : ".") +
           " Reload to see it.",
       );

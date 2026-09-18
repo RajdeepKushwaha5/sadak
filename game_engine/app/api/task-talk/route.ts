@@ -5,7 +5,7 @@ import { taskGraderSystemPrompt, taskTalkSystemPrompt } from "@/lib/game/task-co
 import type { LessonStep } from "@/lib/game/districts";
 import type { NpcTurn } from "@/lib/game/npc-memory";
 import { getPostHogClient } from "@/lib/posthog-server";
-import { looksLikeTargetScript } from "@/lib/game/prompt";
+import { targetScriptShare } from "@/lib/game/prompt";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -37,8 +37,11 @@ function parse(raw: string, checkCount: number): Graded {
     try {
       const p = JSON.parse(text);
       if (typeof p?.reply !== "string") return null;
-      const checks = Array.isArray(p.checks)
-        ? p.checks.slice(0, checkCount).map(Boolean)
+      // Only a real boolean true passes. `.map(Boolean)` turned the string
+      // "false" into true, so a model that quoted its booleans could complete
+      // a mission with every check failing. Anything malformed counts as false.
+      const checks: boolean[] = Array.isArray(p.checks)
+        ? p.checks.slice(0, checkCount).map((c: unknown) => c === true)
         : [];
       while (checks.length < checkCount) checks.push(false);
       return {
@@ -143,13 +146,17 @@ export async function POST(req: Request) {
   const [spokeLanguage, , gotOutcome] = graded.checks;
 
   // The model's "spoke the language" check is not reliable on its own: in
-  // testing it passed a player who spoke only English. So the turn that
-  // closes an errand must also *be* in the target script and not flagged as
-  // an English fallback. That part is a regex, which cannot be talked round.
+  // testing it passed a player who spoke only English. So three signals must
+  // agree: the grader's language check, no English fallback, and at least 40%
+  // of the closing turn's letters in the target script (loanwords keep real
+  // short Hindi sentences below a majority). The script share is a
+  // supporting signal, not proof. It stops "Please take me to the station अ"
+  // passing, but it cannot tell whether a correctly scripted sentence said
+  // anything useful, which is the grader's job.
   const heldInLanguage =
     spokeLanguage === true &&
     graded.englishFallback !== true &&
-    looksLikeTargetScript(playerText ?? "", district.script);
+    targetScriptShare(playerText ?? "", district.script) >= 0.4;
 
   let outcomeAchieved =
     graded.outcomeAchieved && gotOutcome === true && heldInLanguage && playerTurns >= 1;
@@ -161,6 +168,12 @@ export async function POST(req: Request) {
   // this reply. It only runs on turns that did not already succeed, so a
   // clean completion costs no extra latency, and it can only confirm an
   // outcome in a conversation that was held in the target language.
+  //
+  // Cost, measured against live Sarvam: the first call has a median of about
+  // 1.45 s and this one about 0.56 s, so an eligible turn that does not
+  // complete waits roughly 2 s instead of 1.4 s before the NPC speaks. If that
+  // becomes a problem, return the reply first and confirm the outcome while
+  // its audio plays.
   if (!outcomeAchieved && !isOpening && playerTurns >= 2 && heldInLanguage) {
     const exchange = [...transcript, { who: "player" as const, text: playerText! }, { who: "npc" as const, text: graded.reply }]
       .map((t) => `${t.who === "player" ? "PLAYER" : task.name.toUpperCase()}: ${t.text}`)

@@ -119,3 +119,36 @@ export function groupDueByTask(
 
   return { tasks, unplaced };
 }
+
+/**
+ * Comparison key for a phrase: punctuation and spacing stripped, case folded.
+ *
+ * The grader returns phrases as free text, so the same line comes back as
+ * "डेढ़ सौ में चलोगे?", "डेढ़ सौ में चलोगे" or with a trailing danda. Keying on
+ * this lets every variant resolve to the one lesson line it came from.
+ */
+export function phraseKey(text: string): string {
+  return text
+    .normalize("NFC")
+    .replace(/[?!.,;:"'“”‘’()।॥\-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Map phrase text onto the exact lesson line it refers to, or null.
+ *
+ * A retention record should exist only for something the game actually
+ * teaches. Anything the grader reports that is not a lesson line, whether a
+ * paraphrase it liked or a string it invented, is dropped rather than stored
+ * as a phrase the learner supposedly knows.
+ */
+export function canonicalPhraseIndex(tasks: StreetTask[]): Map<string, string> {
+  const byKey = new Map<string, string>();
+  for (const native of indexPhraseSites(tasks).keys()) {
+    const key = phraseKey(native);
+    if (key && !byKey.has(key)) byKey.set(key, native);
+  }
+  return byKey;
+}
