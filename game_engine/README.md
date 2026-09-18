@@ -152,8 +152,9 @@ Bulbul reading the JSON out loud.
 
 **Push-to-talk (fallback).** No LiveKit keys, or no worker running, and the same
 conversation runs turn-based over REST: hold Space, `/api/stt` transcribes,
-`/api/talk` returns the line in about a second so the subtitle appears
-immediately, and `/api/speak` renders the audio behind it. Folding TTS into the
+`/api/task-talk` returns the line and its grading in about a second and a
+half so the subtitle appears quickly, and `/api/speak` renders the audio
+behind it. Folding TTS into the
 dialogue call made every line take five or six seconds to show up.
 
 The fallback is automatic and it is not a dead end: if the room drops mid-scene
@@ -301,7 +302,7 @@ start typing it is an ordinary space. Typing works in both.
 ```
 app/
   api/voice/token/      LiveKit token + the NPC brief the worker plays from
-  api/talk/route.ts     in-character reply + mission grading (~1s)
+  api/task-talk/        in-character reply + errand grading (~1.5s)
   api/speak/route.ts    text → Bulbul audio, fetched behind the subtitle
   api/stt/route.ts      mic audio → transcript
 lib/

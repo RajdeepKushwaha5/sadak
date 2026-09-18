@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  * join, configures Saaras / sarvam-105b / Bulbul from it, and grades against it.
  *
  * 503 here is not a failure: the client falls back to the push-to-talk REST
- * path (/api/stt → /api/talk → /api/speak) and the game plays on.
+ * path (/api/stt → /api/task-talk → /api/speak) and the game plays on.
  */
 
 type Body = { districtId: string; npcId: string; clues?: string[] };
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Unknown NPC "${body.npcId}".` }, { status: 404 });
   }
 
-  // Same gate as /api/talk: a locked NPC must not even get a room.
+  // A locked NPC must not even get a room.
   const clues = body.clues ?? [];
   if (npc.requiresClues && clues.length < npc.requiresClues) {
     return NextResponse.json(

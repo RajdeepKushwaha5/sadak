@@ -15,7 +15,7 @@ The wizard has completed a deep integration of PostHog into the SADAK language l
 | `language_attempt_scored` | Player's spoken language attempt is transcribed and scored in a dialogue lesson. | `components/Dialogue.tsx` |
 | `voice_utterance_submitted` | Roznamcha health worker submits a spoken utterance for field record extraction. | `roznamcha/components/RoznamchaApp.tsx` |
 | `roz_visit_filed` | Roznamcha health worker successfully files a completed household visit record. | `roznamcha/components/RoznamchaApp.tsx` |
-| `errand_outcome_achieved` | ⚠️ **Never fires.** Captured in `app/api/errand/route.ts` and `app/api/task-talk/route.ts`, neither of which is called by the game. See "Routes that do not run" below. |
+| `errand_outcome_achieved` | Server confirms a street errand's real-world outcome was achieved in an unscripted conversation. | `app/api/task-talk/route.ts` |
 | `roz_visit_record_filed` | Server successfully files a Roznamcha household visit record to the store. | `app/api/roz/file/route.ts` |
 
 ## Files created or modified
@@ -30,31 +30,29 @@ The wizard has completed a deep integration of PostHog into the SADAK language l
 - **Modified** `components/Game.tsx` — `district_entered`, `district_left`, `errand_started`, `errand_completed` captures
 - **Modified** `components/Dialogue.tsx` — `language_attempt_scored` capture with points and word verdicts
 - **Modified** `roznamcha/components/RoznamchaApp.tsx` — `voice_utterance_submitted` and `roz_visit_filed` captures
-- **Modified** `app/api/errand/route.ts` — server-side `errand_outcome_achieved` capture (route is unused; see below)
 - **Modified** `app/api/task-talk/route.ts` — server-side `errand_outcome_achieved` capture (route is unused; see below)
 - **Modified** `app/api/roz/file/route.ts` — server-side `roz_visit_record_filed` capture
 
-## Routes that do not run
+## How the conversation actually runs
 
-`/api/talk`, `/api/task-talk` and `/api/errand` are LLM conversation routes
-that nothing in the app calls. A repo-wide search finds no `fetch` to any of
-them — the only hits are prose in comments and in this file. An earlier
-version of this report described `task-talk` as the "primary game route",
-which was wrong.
-
-The conversation the game actually runs is:
+An earlier version of this report described `/api/task-talk` as the "primary
+game route" when nothing called it, so `errand_outcome_achieved` never fired.
+It is now wired in as the errand phase that follows each drill, and the event
+fires when an errand completes. `/api/talk` and `/api/errand`, two older
+conversation routes that nothing called, have been removed.
 
 | Step | Where |
 | --- | --- |
 | Speech to text | `/api/stt` (Sarvam saaras) |
-| Grading the spoken line | `scoreAttempt` in `lib/game/speech-score.ts`, client-side, per word against the scripted `prompt.native` |
-| Retention scheduling | `/api/phrase-review` -> FSRS -> `phrase_memory` |
-| NPC free-form turn | `/api/recall` (Sarvam chat) |
+| Scripted drill line | `scoreAttempt` in `lib/game/speech-score.ts`, client-side phrase match against the expected line |
+| Unscripted errand | `/api/task-talk` (Sarvam chat): in-character reply plus a three-check grade |
+| Retention scheduling | `/api/phrase-review`, then FSRS, then `phrase_memory` |
+| Returning-visit greeting | `/api/recall` (Sarvam chat) |
 | NPC speech | `/api/speak` (Sarvam bulbul) |
 
-So `errand_outcome_achieved` has never been emitted, and any funnel built on
-it reads zero. `language_attempt_scored` is the event that actually tracks
-play.
+`language_attempt_scored` tracks drill lines, `errand_turn_graded` each errand
+turn, and `delayed_recall_attempted` the from-memory questions asked of a
+returning learner.
 
 ## Next steps
 

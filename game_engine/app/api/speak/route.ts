@@ -9,7 +9,7 @@ export const maxDuration = 60;
 /**
  * Voice is a separate round trip from the dialogue so subtitles can appear in
  * well under a second while Bulbul renders the audio behind them. Folding TTS
- * into /api/talk made every line take five seconds to show up.
+ * into the dialogue call made every line take five seconds to show up.
  *
  * Static lesson lines are served from Supabase Storage when warmed; cache
  * misses still call Sarvam live (no upload — run warm-tts-cache to populate).

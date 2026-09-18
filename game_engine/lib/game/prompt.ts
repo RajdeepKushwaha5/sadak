@@ -5,10 +5,11 @@ import type { StreetTask } from "@/lib/game/tasks";
 /**
  * THE PROMPTS
  *
- * One character brief, two consumers:
- *   - /api/talk           text turn, replies with JSON so it can grade itself
+ * Prompts for the story NPCs and the returning-visit recall line. The street
+ * errands the game runs are prompted from task-conversation.ts instead.
  *   - the LiveKit agent   spoken turn, replies with the bare line (it goes
  *                         straight into Bulbul, so JSON would be read aloud)
+ *   - /api/recall         one in-character reopening line, as JSON
  *
  * The bible lives in districts.ts and must stay the single source of truth, so
  * the voice agent is handed its brief at join time rather than keeping a second
@@ -20,8 +21,6 @@ import type { StreetTask } from "@/lib/game/tasks";
  * model satisfies the required keys and then pads whitespace until it hits
  * max_tokens, leaving the object unterminated. json_object closes cleanly.
  */
-export const JSON_SHAPE = `{"reply": "<your line>", "mission_complete": false, "anger": 0}`;
-
 export const RECALL_JSON_SHAPE = `{"reply": "<your line>"}`;
 
 /** One Unicode block per district script, used to catch a reply that ignored
@@ -121,28 +120,6 @@ RULES
   never narrate your own actions in brackets.`;
 }
 
-/** The success criterion and the anger scale, shared by the model and the grader. */
-function objectiveBlock(npc: Npc): string {
-  return `OBJECTIVE
-"${npc.mission.successCriteria}"
-
-Judge this honestly at the end of every turn, against the whole conversation so
-far and not just the player's last message:
-- A greeting alone is never enough, and you should not hand it over cheaply.
-- But the moment the criterion IS satisfied, you MUST set mission_complete to
-  true on that same turn. Do not withhold it once it has genuinely been earned,
-  and do not wait for the player to ask again.
-
-TROUBLE
-These things provoke you: ${npc.provokes}
-Rate how badly the player's last message crossed that line, as "anger":
-  0 = fine, normal conversation, or merely clumsy
-  1 = genuinely rude, insulting, or pushy
-  2 = outrageous. A bribe, a threat, or open contempt
-Most turns are 0. Be strict about 2, and never punish someone for speaking your
-language badly. Fumbling the grammar is not rudeness.`;
-}
-
 /**
  * Models mirror the script they are typed at, so a player writing romanised
  * Hindi gets romanised Hindi back, which breaks both the voice and the point of
@@ -161,19 +138,6 @@ The player will often speak or type to you in Latin letters, like "${
 "${district.phrases[0].roman}" instead of "${district.phrases[0].native}" is a
 failure. Every reply is rendered as ${district.script} text and read aloud by a
 ${district.languageLabel} voice, so Latin letters break it.`;
-}
-
-/** The text path: one JSON object per turn, reply plus its own grading. */
-export function talkSystemPrompt(district: District, npc: Npc, clues: string[]): string {
-  return `${characterBrief(district, npc, clues)}
-
-${objectiveBlock(npc)}
-
-${scriptBlock(district)}
-
-OUTPUT
-Reply with a single JSON object and nothing else:
-${JSON_SHAPE}`;
 }
 
 /**
