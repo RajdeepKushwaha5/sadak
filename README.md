@@ -10,7 +10,7 @@ SADAK is a speaking game for people moving to an Indian city who know a few word
 
 When a phrase is due for review, the game sends you back to the person who taught it. This time, you try saying it before the answer appears.
 
-**[Play SADAK](https://sadak-virid.vercel.app) · [Run locally](#run-locally) · [How learning works](#how-learning-works) · [Check the project](#check-the-project)**
+**[▶ Watch the demo video](https://youtu.be/7TP1ytyvBIk) · [Play SADAK live](https://sadak-virid.vercel.app) · [Run locally](#run-locally) · [How learning works](#how-learning-works) · [Check the project](#check-the-project)**
 
 <p align="center">
   <a href="docs/media/sadak-preview.mp4">
