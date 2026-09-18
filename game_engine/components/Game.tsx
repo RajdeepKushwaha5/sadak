@@ -135,15 +135,33 @@ export default function GameShell() {
     if (stops.length === 0 || !stops.every((id) => roundCleared.has(id))) return;
 
     roundBankedRef.current = true;
-    void fetch(`/api/round?tzOffset=${new Date().getTimezoneOffset()}`, { method: "POST" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((res) => {
-        if (!res) return;
-        setRound((prev) => (prev ? { ...prev, clearedToday: true, streak: res.streak } : prev));
-        setRoundOpen(true);
-        playSfx("cash");
-      })
-      .catch(() => {});
+    const tz = new Date().getTimezoneOffset();
+    // The last stop clears the moment its phrase is answered, but that answer
+    // is saved fire-and-forget, and the server will only bank a streak once it
+    // can see practice recorded today. So a 409 here usually means "not saved
+    // yet", and it is retried with a short backoff rather than dropped.
+    const bank = async (attempt: number): Promise<void> => {
+      try {
+        const r = await fetch(`/api/round?tzOffset=${tz}`, { method: "POST" });
+        if (r.ok) {
+          const res = await r.json();
+          setRound((prev) => (prev ? { ...prev, clearedToday: true, streak: res.streak } : prev));
+          setRoundOpen(true);
+          playSfx("cash");
+          return;
+        }
+        if ((r.status === 409 || r.status >= 500) && attempt < 3) {
+          await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+          return bank(attempt + 1);
+        }
+      } catch {
+        if (attempt < 3) {
+          await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
+          return bank(attempt + 1);
+        }
+      }
+    };
+    void bank(0);
   }, [round, roundCleared]);
 
   const nearbyRef = useRef<string | null>(null);
@@ -385,7 +403,11 @@ export default function GameShell() {
       .then((r) => (r.ok ? r.json() : null))
       .then((r: Round | null) => {
         if (cancelled || !r?.stops?.length || r.clearedToday) return;
-        setRound(r);
+        // Only stops in this district: a round listing a stall in another
+        // city could never be finished from here, so the streak would stall.
+        const here = r.stops.filter((st) => st.districtId === district.id);
+        if (!here.length) return;
+        setRound({ ...r, stops: here });
         setRoundOpen(true);
       })
       .catch(() => {});
@@ -800,6 +822,13 @@ export default function GameShell() {
             setDuePhrases((prev) => {
               const left = (prev[talking.id] ?? []).filter((p) => p.native !== native);
               const next = { ...prev, [talking.id]: left };
+              // The round exists to revisit due phrases, so a stop is walked
+              // once they have been asked for, whether or not the full errand
+              // is then won. Tying it to the errand made the streak depend on
+              // winning a negotiation rather than on reviewing.
+              if (left.length === 0) {
+                setRoundCleared((rc) => (rc.has(talking.id) ? rc : new Set(rc).add(talking.id)));
+              }
               gameRef.current?.setDue(
                 Object.entries(next)
                   .filter(([, ps]) => ps.length > 0)

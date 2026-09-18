@@ -421,6 +421,7 @@ export default function Dialogue({
    */
   function handleReviewAttempt(transcript: string) {
     if (!reviewItem) return;
+    setHeardNothing(false);
     const scored = scoreAttempt(reviewItem.native, transcript);
 
     const offScript = !looksLikeTargetScript(transcript, district.script);
@@ -460,6 +461,7 @@ export default function Dialogue({
     setReviewResult(null);
     setReviewRevealed(false);
     setMisheard(false);
+    setHeardNothing(false);
     if (reviewIndex + 1 < reviewQueue.length) {
       setReviewIndex((i) => i + 1);
       return;
@@ -768,6 +770,11 @@ export default function Dialogue({
                 That did not come through clearly. Say it once more, this one will
                 not count against you.
               </p>
+            )}
+            {/* The drill shows this inside the NPC card, which is hidden here,
+                so without its own copy an empty capture would fail silently. */}
+            {heardNothing && !reviewResult && (
+              <p className="text-center text-xs text-chart-2">{ui("didntCatch", baseLang)}</p>
             )}
 
             {!reviewResult ? (

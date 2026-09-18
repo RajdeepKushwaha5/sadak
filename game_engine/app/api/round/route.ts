@@ -88,7 +88,27 @@ export async function POST(req: Request) {
   const userId = auth.user?.id;
   if (!userId) return NextResponse.json({ error: "Sign in to practise." }, { status: 401 });
 
-  const today = dayKey(new Date(), offsetFrom(req));
+  const offset = offsetFrom(req);
+  const today = dayKey(new Date(), offset);
+
+  // The client says the round is done; the server checks there is evidence
+  // of it. Without this, anyone signed in could POST once a day and keep a
+  // streak without saying a word. "Practised today" means at least one phrase
+  // reviewed since the start of the player's own day.
+  const startOfDay = new Date(Date.parse(`${today}T00:00:00Z`) + offset * 60_000).toISOString();
+  const { count, error: practiceError } = await supabase
+    .from("phrase_memory")
+    .select("phrase_native", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("last_seen_at", startOfDay);
+  if (practiceError) {
+    console.error("phrase_memory read failed", practiceError);
+    return NextResponse.json({ error: "Could not check today's practice." }, { status: 500 });
+  }
+  if (!count) {
+    return NextResponse.json({ error: "No practice recorded today yet." }, { status: 409 });
+  }
+
   const before = await readStreak(supabase, userId);
   const after = clearRound(before, today);
 
