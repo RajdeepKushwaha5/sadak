@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import type { LeaderboardRow } from "@/lib/game/leaderboard";
+import type {
+  LeaderboardResponse,
+  LeaderboardRow,
+} from "@/lib/game/leaderboard";
 
 export const runtime = "nodejs";
 
@@ -35,13 +38,13 @@ export async function GET(req: Request) {
     Math.max(MIN_PAGE_SIZE, requestedPageSize),
   );
   const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
 
-  const { data, error, count } = await supabase
-    .from("leaderboard")
-    .select("*", { count: "exact" })
-    .order("rank", { ascending: true })
-    .range(from, to);
+  // The ranking lives in a private schema; get_leaderboard returns one page
+  // plus the total, with `is_me` in place of user ids (migration 014).
+  const { data, error } = await supabase.rpc("get_leaderboard", {
+    p_limit: pageSize,
+    p_offset: from,
+  });
 
   if (error) {
     console.error("GET /api/leaderboard", error);
@@ -51,11 +54,12 @@ export async function GET(req: Request) {
     );
   }
 
-  return NextResponse.json({
-    rows: (data ?? []) as LeaderboardRow[],
-    total: count ?? 0,
+  const result = (data ?? {}) as { total?: number; rows?: LeaderboardRow[] };
+  const body: LeaderboardResponse = {
+    rows: result.rows ?? [],
+    total: result.total ?? 0,
     page,
     pageSize,
-    meId: user.id,
-  });
+  };
+  return NextResponse.json(body);
 }

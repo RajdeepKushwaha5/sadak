@@ -261,10 +261,10 @@ export default function LeaderboardTable() {
           </TableHeader>
           <TableBody>
             {data.rows.map((row) => {
-              const isMe = row.user_id === data.meId;
+              const isMe = row.is_me;
               return (
                 <ScoreRow
-                  key={row.user_id}
+                  key={row.rank}
                   row={row}
                   isMe={isMe}
                   className={rowClass(row.rank, isMe)}
