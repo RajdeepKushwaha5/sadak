@@ -331,9 +331,3 @@ python agent.py dev
 ```
 
 `python agent.py console` runs a standalone voice check. Use headphones. See [voice handover notes](docs/HANDOVER.md) for integration details.
-
-## Project background
-
-The world, districts, voice integration and original scripted drills began as team work for the Sarvam Epoch Buildathon. The Nerdy challenge work developed the learning layer: phrase memory, spaced review, daily rounds, adaptive difficulty, unscripted errands, delayed recall and encounter reports.
-
-The speech client also builds on work from [Kahani](https://github.com/harshagw/kahani). Earlier work and contributions remain part of the project's history.
