@@ -72,6 +72,9 @@ export default function Dialogue({
   const [errandBusy, setErrandBusy] = useState(false);
   const [errandChecks, setErrandChecks] = useState<boolean[]>([]);
   const [errandUsed, setErrandUsed] = useState<string[]>([]);
+  /** Phrases already credited this errand. A ref, so two quick turns cannot
+   *  both read stale state and credit the same phrase twice. */
+  const creditedRef = useRef<Set<string>>(new Set());
   const [attempt, setAttempt] = useState<{
     transcript: string;
     verdicts: WordVerdict[];
@@ -295,18 +298,23 @@ export default function Dialogue({
       pushTurn({ role: "assistant", content: g.reply });
 
       const used: string[] = Array.isArray(g.phrasesUsed) ? g.phrasesUsed : [];
-      if (used.length) {
-        setErrandUsed((prev) => [...new Set([...prev, ...used])]);
-        // Phrases that carried an unscripted exchange are the strongest
-        // evidence of retention the game can gather. Best-effort: a failed
-        // write must not interrupt the conversation.
+      // The grader reads the whole conversation, so a phrase said on turn one
+      // can be reported again on every turn after it. Each phrase earns one
+      // review per errand, on the turn it first appears; crediting it again
+      // would tell the scheduler it had been recalled several times when it
+      // was said once.
+      const fresh = used.filter((p) => !creditedRef.current.has(p));
+      for (const p of fresh) creditedRef.current.add(p);
+      if (fresh.length) {
+        setErrandUsed((prev) => [...prev, ...fresh]);
+        // Best-effort: a failed write must not interrupt the conversation.
         void fetch("/api/phrase-review", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             districtId: district.id,
             lang: district.language,
-            used,
+            used: fresh,
             englishFallback: g.englishFallback === true,
           }),
         }).catch(() => {});

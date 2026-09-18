@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { sarvamChat, type ChatMessage } from "@/lib/sarvam";
 import { findTaskInLoaded, loadDistrictById } from "@/lib/game/load-district";
-import { taskTalkSystemPrompt } from "@/lib/game/task-conversation";
+import { taskGraderSystemPrompt, taskTalkSystemPrompt } from "@/lib/game/task-conversation";
 import type { LessonStep } from "@/lib/game/districts";
 import type { NpcTurn } from "@/lib/game/npc-memory";
 import { getPostHogClient } from "@/lib/posthog-server";
+import { looksLikeTargetScript } from "@/lib/game/prompt";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -132,7 +133,57 @@ export async function POST(req: Request) {
 
   const graded = parse(raw, checkCount);
   const playerTurns = transcript.filter((t) => t.who === "player").length + (playerText ? 1 : 0);
-  const outcomeAchieved = graded.outcomeAchieved && playerTurns >= 1;
+  // The model's outcome flag alone is not enough: a reply that says "done"
+  // while its own checks say the player never spoke the language, or never
+  // got the result, is contradicting itself, and a mission must not complete
+  // on contradictory output. Speaking the language (check 1) and the outcome
+  // itself (check 3) are required. Check 2, answering what was asked, is
+  // reported but not gating, since a final "yes, let's go" turn can close a
+  // deal without directly answering the NPC's last line.
+  const [spokeLanguage, , gotOutcome] = graded.checks;
+
+  // The model's "spoke the language" check is not reliable on its own: in
+  // testing it passed a player who spoke only English. So the turn that
+  // closes an errand must also *be* in the target script and not flagged as
+  // an English fallback. That part is a regex, which cannot be talked round.
+  const heldInLanguage =
+    spokeLanguage === true &&
+    graded.englishFallback !== true &&
+    looksLikeTargetScript(playerText ?? "", district.script);
+
+  let outcomeAchieved =
+    graded.outcomeAchieved && gotOutcome === true && heldInLanguage && playerTurns >= 1;
+
+  // One call is both the NPC and the grader, and in testing it missed deals it
+  // had just agreed to in its own reply about a third of the time, leaving an
+  // honest learner with no way to finish. When it has not completed, ask a
+  // second, single-purpose grader that sees the whole exchange *including*
+  // this reply. It only runs on turns that did not already succeed, so a
+  // clean completion costs no extra latency, and it can only confirm an
+  // outcome in a conversation that was held in the target language.
+  if (!outcomeAchieved && !isOpening && playerTurns >= 2 && heldInLanguage) {
+    const exchange = [...transcript, { who: "player" as const, text: playerText! }, { who: "npc" as const, text: graded.reply }]
+      .map((t) => `${t.who === "player" ? "PLAYER" : task.name.toUpperCase()}: ${t.text}`)
+      .join("\n");
+    try {
+      const second = await sarvamChat(
+        [
+          { role: "system", content: taskGraderSystemPrompt(district, task) },
+          { role: "user", content: exchange },
+        ],
+        { temperature: 0.1, maxTokens: 120, responseFormat: { type: "json_object" } },
+      );
+      const match = second.match(/\{[\s\S]*\}/);
+      const verdict = JSON.parse(match ? match[0] : second);
+      if (verdict?.mission_complete === true) {
+        outcomeAchieved = true;
+        graded.checks[2] = true;
+      }
+    } catch (err) {
+      // A failed second opinion leaves the first verdict standing.
+      console.error("task-talk second grader failed", err);
+    }
+  }
 
   if (outcomeAchieved) {
     const posthog = getPostHogClient();

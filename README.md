@@ -2,11 +2,41 @@
   <img src="game_engine/app/icon.png" alt="SADAK" width="36" height="36" />
 </p>
 
-## Sarvam Hackathon — LiveKit Voice Agent
+# SADAK
+
+**Practise the conversations you need in an Indian city, by having them.**
+
+SADAK is a voice-first language-learning game for people who know a few words
+of an Indian language but freeze in everyday conversations. Ten cities, and
+nobody on the street speaks English. You learn a few lines from an auto driver
+or a shopkeeper, then use them in an unscripted conversation where an AI judges
+whether you were actually understood. Every line you say feeds a
+spaced-repetition schedule, so the phrases you are starting to lose come back
+on a daily round.
+
+Submitted to the **Nerdy AI Hackathon Challenge**, Prompt 02 (Language Learning).
+
+| | |
+| --- | --- |
+| **The game** | [`game_engine/`](game_engine/README.md), Next.js + three.js. Start here. |
+| **What was built for this challenge** | [game_engine/README.md](game_engine/README.md#what-was-built-for-this-challenge) |
+| **How learning is measured** | [Retention: knowing it next week](game_engine/README.md#retention-knowing-it-next-week) |
+| **Live NPC voice** | Optional. The Python worker below. |
+
+```bash
+cd game_engine && npm install && npm run dev   # http://localhost:3000
+```
+
+Without the voice worker the game uses push-to-talk, which is all you need to
+play.
+
+---
+
+## Live NPC voice agent (optional)
 
 Real-time voice agent using [LiveKit](https://docs.livekit.io) and [Sarvam AI](https://docs.sarvam.ai) (STT, LLM, TTS). Supports 11 languages (10 Indian + English).
 
-`agent.py` is the voice worker for **SADAK**, the game in [`game_engine/`](game_engine/README.md). One LiveKit room is one conversation with one NPC: the game mints the token, ships the character brief in the player's participant metadata, and this worker plays that character — reading its persona, language, voice and mission rubric off the wire. Run it with no game attached (`python agent.py console`) and it falls back to a plain voice assistant, which is the fastest way to check keys and audio.
+`agent.py` is the live voice worker for the game in [`game_engine/`](game_engine/README.md). One LiveKit room is one conversation with one NPC: the game mints the token, ships the character brief in the player's participant metadata, and this worker plays that character, reading its persona, language, voice and mission rubric off the wire. Run it with no game attached (`python agent.py console`) and it falls back to a plain voice assistant, which is the fastest way to check keys and audio.
 
 ```
 browser mic → LiveKit room → saaras:v3 → sarvam-105b → bulbul:v3 → browser speakers

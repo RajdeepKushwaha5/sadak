@@ -87,21 +87,29 @@ Clearing a district proves you got through it once. It says nothing about
 whether you can still say any of it on Tuesday, and an app you finish is not
 an app you learn from.
 
-So every spoken line is also a spaced-repetition review. `scoreAttempt`
-already grades each attempt 0-100 against the exact phrase the drill asked
-for; that score feeds [FSRS](https://github.com/open-spaced-repetition/ts-fsrs)
-and schedules the phrase. No quiz, no flashcard deck, nothing extra asked of
-the player. The errand *is* the review.
+So every spoken line is also a spaced-repetition review, fed into
+[FSRS](https://github.com/open-spaced-repetition/ts-fsrs). No quiz, no
+flashcard deck, nothing extra asked of the player. The errand *is* the review.
 
-| Score | Grade | Effect |
+The grade depends on *what kind of evidence* the attempt is, because reading a
+line, using it while fresh, and recalling it later are not the same thing:
+
+| Evidence | Grade | Why |
 | --- | --- | --- |
-| 90-100 | Easy | stops asking to be practised |
-| 72-89 | Good | interval lengthens |
-| 40-71 | Hard | comes back sooner |
-| 0-39 | Again | lapse; back to today |
+| Drill, line on screen, 40+ phrase match | Hard | reading is not remembering, however clean |
+| Drill, answer hidden, 72+ | Good | produced from memory |
+| Drill, answer hidden, 90+ | Easy | the only route to Easy |
+| Errand, used unprompted | Good | real use, but moments after seeing it |
+| Errand, leaned on English | Hard | the phrase landed but was not carrying the turn |
+| Under 40 phrase match | Again | lapse, back to today |
 
-The thresholds are the same 72/40 bands the words are coloured with and the
-sounds play on, so what you hear and what the scheduler does cannot disagree.
+A phrase is credited once per errand, on the turn it first appears. The first
+attempt at a drill line that looks like a mishearing (off-script, or nothing
+matched) offers a retry and records nothing, because a bad capture is not
+forgetting.
+
+"Phrase match" is exactly that: a comparison of what the recogniser heard
+against the expected line. It measures words matched, not pronunciation.
 
 **What that buys:**
 

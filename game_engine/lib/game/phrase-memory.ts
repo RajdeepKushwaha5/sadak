@@ -81,15 +81,18 @@ const scheduler = fsrs();
  * who hears "good" and then watches the phrase come back tomorrow as if they
  * had failed would rightly stop trusting the schedule.
  *
- * An errand only ever reports phrases the player *did* produce, unprompted,
- * in an unscripted exchange. That is the strongest evidence available that a
- * phrase is genuinely held, so it outranks any recitation. Leaning on English
- * for the rest of the turn pulls it back one step: the phrase landed, but it
- * was not carrying the conversation.
+ * An errand reports phrases the player produced unprompted in an unscripted
+ * exchange. That is better evidence than reading, but it happens moments
+ * after the drill showed the same line, so it proves the phrase can be used
+ * while fresh, not that it will be there tomorrow. It grades Good, which
+ * lengthens the interval without claiming the phrase is already easy. Only a
+ * later, unaided recall can earn Easy. Leaning on English for the rest of the
+ * turn pulls it to Hard: the phrase landed, but it was not carrying the
+ * conversation.
  */
 export function gradeFor(outcome: PhraseOutcome): Grade {
   if (outcome.source === "errand") {
-    return outcome.englishFallback ? Rating.Good : Rating.Easy;
+    return outcome.englishFallback ? Rating.Hard : Rating.Good;
   }
 
   const unaided = !outcome.answerVisible;
