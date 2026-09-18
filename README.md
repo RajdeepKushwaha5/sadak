@@ -337,11 +337,3 @@ python agent.py dev
 The world, districts, voice integration and original scripted drills began as team work for the Sarvam Epoch Buildathon. The Nerdy challenge work developed the learning layer: phrase memory, spaced review, daily rounds, adaptive difficulty, unscripted errands, delayed recall and encounter reports.
 
 The speech client also builds on work from [Kahani](https://github.com/harshagw/kahani). Earlier work and contributions remain part of the project's history.
-
-## What comes next
-
-- A shorter first session that starts at a useful conversation.
-- Portrait practice on phones, with street exploration available separately.
-- A reviewed multilingual evaluation set for grading, mixed-language replies and recognition errors.
-- Specific corrections followed by a changed situation, so learners can apply the feedback.
-- Measurements of unassisted recall across return visits.
