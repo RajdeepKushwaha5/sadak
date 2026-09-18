@@ -10,7 +10,7 @@ SADAK is a speaking game for people moving to an Indian city who know a few word
 
 When a phrase is due for review, the game sends you back to the person who taught it. This time, you try saying it before the answer appears.
 
-**[Play SADAK](https://playsadak.vercel.app) · [Run locally](#run-locally) · [How learning works](#how-learning-works) · [Check the project](#check-the-project)**
+**[Play SADAK](https://sadak-virid.vercel.app) · [Run locally](#run-locally) · [How learning works](#how-learning-works) · [Check the project](#check-the-project)**
 
 Built for the **Nerdy AI Hackathon Challenge, Prompt 02: Language Learning**.
 
@@ -30,7 +30,7 @@ SADAK gives learners somewhere to practise those exchanges. It provides support 
 
 ## Try a first errand
 
-Open the [game](https://playsadak.vercel.app), sign in, and allow microphone access when asked. Headphones help keep the character's voice out of your recording.
+Open the [game](https://sadak-virid.vercel.app), sign in, and allow microphone access when asked. Headphones help keep the character's voice out of your recording.
 
 1. Choose a city, your instruction language and your comfort level.
 2. Walk to a task character. Follow the short speaking drill with romanisation and meanings on screen.
