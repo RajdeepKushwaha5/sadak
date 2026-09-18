@@ -43,19 +43,27 @@ Phone play uses landscape orientation and touch controls. On desktop, use WASD t
 
 ## How learning works
 
-```text
-New phrase:   Listen -> practise with the line -> use it in an errand
-                                                  |
-                                            review schedule
-                                                  |
-Due phrase:   Return to the NPC -> try from memory -> feedback and practice
+```mermaid
+flowchart LR
+    A["NPC says a line"] --> B["Drill<br/>line on screen"]
+    B --> C["Errand<br/>no script"]
+    B -. "phrase match" .-> D[("FSRS schedule<br/>per phrase")]
+    C -. "phrases used" .-> D
+    D -- "days pass" --> E["Phrase due<br/>violet marker, daily round"]
+    E --> F["Back at the same NPC<br/>From memory: meaning only"]
+    F -- "answered first" --> G["Recall credit<br/>Good or Easy"]
+    F -- "revealed the line" --> H["Practice credit<br/>Hard at most"]
+    G --> D
+    H --> D
 ```
+
+A new phrase is taught with the line visible, then used in an unscripted errand. Both feed a per-phrase schedule. When the schedule says the phrase is fading, the learner is sent back to the character who taught it and asked for it before the answer is shown.
 
 ### Practice, use and recall
 
 The guided drill compares the speech transcript with the expected phrase and highlights matching words. The errand then asks the learner to use the language in a conversation with a concrete outcome.
 
-Returning learners get up to three due phrases before the lesson begins. The meaning is shown first; the target sentence stays hidden until they answer or ask to reveal it. The review records whether the answer was visible.
+Returning learners get up to two due phrases before the lesson begins. The meaning is shown first; the target sentence stays hidden until they answer or ask to reveal it. The review records whether the answer was visible.
 
 Each attempt updates a per-phrase [FSRS schedule](game_engine/lib/game/phrase-memory.ts):
 
@@ -76,6 +84,33 @@ Fresh use in an errand does not earn Easy: the learner just saw the phrase in th
 ### An errand must actually finish
 
 The conversation route checks the model's outcome verdict against its language and outcome checks. Target-script coverage provides another signal about the closing turn. When an eligible exchange remains incomplete, a second grader can check the conversation including the NPC's latest reply.
+
+```mermaid
+sequenceDiagram
+    actor L as Learner
+    participant UI as Dialogue
+    participant STT as api/stt
+    participant TT as api/task-talk
+    participant M as Sarvam chat
+    participant PR as api/phrase-review
+    participant DB as Supabase
+
+    L->>UI: Holds the mic and speaks
+    UI->>STT: Audio
+    STT-->>UI: Transcript
+    UI->>TT: Transcript and conversation so far
+    TT->>M: Reply in character and grade the turn
+    M-->>TT: Reply, three checks, phrases used
+    Note over TT: Completes only if the outcome is flagged,<br/>check 3 passes, and the turn is held in the language<br/>(grader check 1, no English fallback, 40% or more in script)
+    opt Not complete, turn 2 or later, still in the language
+        TT->>M: Second grader reads the whole exchange
+        M-->>TT: mission_complete
+    end
+    TT-->>UI: Reply, checks, outcome
+    UI->>PR: Phrases not yet credited this errand
+    PR->>DB: Matched to lesson lines, FSRS update
+    UI->>L: NPC speaks the reply
+```
 
 Reported phrases are matched to the district's lesson content. Punctuation variants are normalized, unknown phrases are dropped, and repeated phrases are filtered before recording. See the [conversation route](game_engine/app/api/task-talk/route.ts), [phrase matching](game_engine/lib/game/due.ts) and [review endpoint](game_engine/app/api/phrase-review/route.ts).
 
@@ -204,16 +239,43 @@ Use a dedicated test account: this changes stored records. The control is unavai
 
 ## Under the hood
 
-```text
-Browser: Next.js + React + three.js
-  |
-  +-- microphone -> /api/stt -> speech transcript
-  +-- transcript -> /api/task-talk -> NPC reply + outcome checks
-  +-- reply -> /api/speak -> spoken audio
-  |
-  +-- attempts -> /api/phrase-review -> FSRS -> Supabase phrase memory
-  +-- /api/due and /api/round -> NPC review stops
-  +-- /api/report -> progress page
+```mermaid
+flowchart LR
+    subgraph Browser["Browser: Next.js, React, three.js"]
+        W["Street world"]
+        DLG["Dialogue"]
+        PG["Progress page"]
+    end
+
+    subgraph Routes["Next.js API routes"]
+        STT["api/stt"]
+        TT["api/task-talk"]
+        RC["api/recall"]
+        SP["api/speak"]
+        PR["api/phrase-review"]
+        DUE["api/due and api/round"]
+        REP["api/report"]
+    end
+
+    subgraph Sarvam["Sarvam AI"]
+        S1["saaras:v3<br/>speech to text"]
+        S2["sarvam-105b<br/>replies and grading"]
+        S3["bulbul:v3<br/>speech"]
+    end
+
+    subgraph Supabase["Supabase"]
+        AUTH["Auth"]
+        DB[("Postgres<br/>phrase_memory<br/>practice_streak<br/>district_progress")]
+    end
+
+    DLG --> STT --> S1
+    DLG --> TT --> S2
+    DLG --> RC --> S2
+    DLG --> SP --> S3
+    DLG --> PR --> DB
+    W --> DUE --> DB
+    PG --> REP --> DB
+    Routes -. "session check" .-> AUTH
 ```
 
 | Part | Implementation |
