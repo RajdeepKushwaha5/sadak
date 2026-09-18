@@ -7,6 +7,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // `ingest` is the PostHog proxy (see next.config.mjs rewrites). Through
+    // the auth check, signed-out visitors' events were redirected to /login
+    // and every signed-in event cost a Supabase auth round trip.
+    "/((?!_next/static|_next/image|favicon.ico|ingest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

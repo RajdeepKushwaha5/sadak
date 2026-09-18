@@ -97,9 +97,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Task not in this district." }, { status: 404 });
   }
 
-  const lesson = body.lesson ?? [];
-  const memory = body.memory ?? [];
-  const transcript = body.transcript ?? [];
+  // Everything below comes from the browser and goes into the model's prompt,
+  // so it is bounded and, where the server knows the truth, checked against
+  // it. The lesson is the obvious case: accept only steps this task really
+  // teaches, so a crafted request cannot plant its own "target phrases".
+  const clip = (text: unknown, max: number) => (typeof text === "string" ? text.slice(0, max) : "");
+  const taught = new Set(
+    Object.values(task.lessons ?? {}).flatMap((steps) => (steps ?? []).map((st) => st.prompt?.native)),
+  );
+  const offered = Array.isArray(body.lesson) ? body.lesson : [];
+  const genuine = offered.filter((st) => st?.prompt?.native && taught.has(st.prompt.native));
+  const lesson = genuine.length ? genuine : (task.lessons?.medium ?? []);
+  const memory = (Array.isArray(body.memory) ? body.memory : [])
+    .slice(-8)
+    .map((t) => ({ ...t, content: clip(t?.content, 300) }));
+  const transcript = (Array.isArray(body.transcript) ? body.transcript : [])
+    .slice(-12)
+    .map((t) => ({ who: t?.who === "player" ? ("player" as const) : ("npc" as const), text: clip(t?.text, 400) }));
   const checkCount = 3;
 
   const system = taskTalkSystemPrompt(district, task, lesson, memory);
@@ -109,7 +123,8 @@ export async function POST(req: Request) {
     content: t.text,
   }));
 
-  const playerText = body.playerText?.trim();
+  // A spoken turn is a sentence or two; 400 characters is generous.
+  const playerText = typeof body.playerText === "string" ? body.playerText.trim().slice(0, 400) : undefined;
   const isOpening = !playerText && transcript.length === 0;
 
   if (!isOpening && !playerText) {

@@ -8,6 +8,9 @@ import {
   type DistrictProgress,
   type DistrictProgressRow,
 } from "@/lib/game/progress";
+import { loadDistrictById } from "@/lib/game/load-district";
+import { totalTaskRewardForTasks } from "@/lib/game/tasks";
+import { barberTaskId } from "@/lib/game/barber";
 
 export const runtime = "nodejs";
 
@@ -87,6 +90,19 @@ export async function PUT(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+
+  // The browser reports its own progress, so check what can be checked. An
+  // errand id that is not in this district is dropped rather than stored as
+  // done, and cash cannot exceed what the district's errands actually pay.
+  // XP is not bounded here: drill points accumulate per attempt, so there is
+  // no fixed ceiling to hold it to without recording the attempts server-side.
+  const loaded = await loadDistrictById(progress.districtId);
+  if (!loaded) {
+    return NextResponse.json({ error: "Unknown district." }, { status: 404 });
+  }
+  const realIds = new Set([...loaded.tasks.map((t) => t.id), barberTaskId(loaded.id)]);
+  progress.completedTaskIds = [...new Set(progress.completedTaskIds)].filter((id) => realIds.has(id));
+  progress.cash = Math.min(progress.cash, totalTaskRewardForTasks(loaded.tasks));
 
   const row = progressToUpsert(user.id, progress);
   const { data, error } = await supabase

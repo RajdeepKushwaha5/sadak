@@ -14,8 +14,20 @@ function sttStatus(err: unknown): number | undefined {
   return (err as { status?: number })?.status;
 }
 
+/**
+ * A held-mic utterance is a few hundred KB of Opus. Anything far past that is
+ * not speech the game asked for, and would be sent on to Sarvam on the
+ * project's credits.
+ */
+const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
+
 export async function POST(req: Request) {
-  const form = await req.formData();
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return NextResponse.json({ error: "Malformed request body." }, { status: 400 });
+  }
   const audio = form.get("audio");
   const language = form.get("language");
   // Set by useVoice's live-partial requests (900ms MediaRecorder slices) so this
@@ -24,6 +36,9 @@ export async function POST(req: Request) {
 
   if (!(audio instanceof Blob)) {
     return NextResponse.json({ error: "No audio supplied." }, { status: 400 });
+  }
+  if (audio.size > MAX_AUDIO_BYTES) {
+    return NextResponse.json({ error: "Recording too long. Hold the mic for one line." }, { status: 413 });
   }
 
   try {

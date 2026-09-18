@@ -12,6 +12,33 @@
 import { DEFAULT_RETRY_OPTS, withRetry } from "@/lib/retry";
 
 const BASE = "https://api.sarvam.ai";
+
+/**
+ * fetch with a hard deadline.
+ *
+ * None of the Sarvam calls had one, so a stalled upstream held the request
+ * open until the platform killed it at 60 s, with the player's mic disabled
+ * the whole time. A timeout is reported with status 0, which withRetry does
+ * not retry: a request that already stalled for this long would only stall
+ * again, and three stalls would overrun the function limit anyway.
+ */
+async function timedFetch(url: string, init: RequestInit, ms: number): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(ms) });
+  } catch (err) {
+    const name = (err as { name?: string })?.name;
+    if (name === "TimeoutError" || name === "AbortError") {
+      const timeout = new Error(`Sarvam request timed out after ${ms} ms`) as Error & { status: number };
+      timeout.status = 0;
+      throw timeout;
+    }
+    throw err;
+  }
+}
+
+/** Per attempt. Two chat calls in one turn must still fit inside 60 s. */
+const CHAT_TIMEOUT_MS = 20_000;
+const SPEECH_TIMEOUT_MS = 20_000;
 const TTS_MODEL = process.env.SARVAM_TTS_MODEL || "bulbul:v3";
 const CHAT_MODEL = process.env.SARVAM_CHAT_MODEL || "sarvam-105b";
 
@@ -83,7 +110,7 @@ export async function sarvamChat(
   } = {}
 ): Promise<string> {
   const json = await withRetry(async () => {
-    const res = await fetch(`${BASE}/v1/chat/completions`, {
+    const res = await timedFetch(`${BASE}/v1/chat/completions`, {
       method: "POST",
       headers: {
         "api-subscription-key": key(),
@@ -97,7 +124,7 @@ export async function sarvamChat(
         reasoning_effort: opts.reasoningEffort ?? null,
         ...(opts.responseFormat ? { response_format: opts.responseFormat } : {}),
       }),
-    });
+    }, CHAT_TIMEOUT_MS);
 
     if (!res.ok) {
       const err = new Error(`Sarvam chat ${res.status}: ${await res.text()}`) as Error & {
@@ -144,7 +171,7 @@ export async function sarvamTTS(
 
   try {
     const res = await withRetry(async () => {
-      const response = await fetch(`${BASE}/text-to-speech`, {
+      const response = await timedFetch(`${BASE}/text-to-speech`, {
         method: "POST",
         headers: {
           "api-subscription-key": key(),
@@ -160,7 +187,7 @@ export async function sarvamTTS(
           output_audio_codec: "wav",
           speech_sample_rate: 24000,
         }),
-      });
+      }, SPEECH_TIMEOUT_MS);
 
       if (!response.ok) {
         const err = new Error(
@@ -208,11 +235,11 @@ export async function sarvamSTT(
     form.append("mode", opts.mode ?? "transcribe");
     if (opts.language) form.append("language_code", opts.language);
 
-    const res = await fetch(`${BASE}/speech-to-text`, {
+    const res = await timedFetch(`${BASE}/speech-to-text`, {
       method: "POST",
       headers: { "api-subscription-key": key() },
       body: form,
-    });
+    }, SPEECH_TIMEOUT_MS);
 
     if (!res.ok) {
       const err = new Error(`Sarvam STT ${res.status}: ${await res.text()}`) as Error & {
