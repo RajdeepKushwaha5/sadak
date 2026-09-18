@@ -12,6 +12,15 @@ When a phrase is due for review, the game sends you back to the person who taugh
 
 **[Play SADAK](https://sadak-virid.vercel.app) · [Run locally](#run-locally) · [How learning works](#how-learning-works) · [Check the project](#check-the-project)**
 
+<p align="center">
+  <a href="docs/media/sadak-preview.mp4">
+    <img src="docs/media/sadak-preview.gif" alt="SADAK preview: a learner says a Hindi line to an auto driver, it is scored, the phrase is scheduled, and on a later visit the driver asks for it from memory" width="720" />
+  </a>
+</p>
+<p align="center"><sub>
+  50-second preview, <a href="docs/media/sadak-preview.mp4">also as MP4</a>. Recorded by driving the game automatically. The voice is a Sarvam Bulbul recording of the drill line, transcribed and scored live by the game; both scores shown are real. The week between the two visits is simulated with a development tool.
+</sub></p>
+
 Built for the **Nerdy AI Hackathon Challenge, Prompt 02: Language Learning**.
 
 ## What makes SADAK different
