@@ -61,7 +61,13 @@ async function saveReview(body: unknown, attempt = 0): Promise<void> {
  * script, a person who will not switch to English, and a model judging
  * whether you were actually understood.
  */
-type Phase = "recall" | "npc" | "player" | "result" | "errand" | "finished";
+type Phase = "review" | "recall" | "npc" | "player" | "result" | "errand" | "finished";
+
+/** A phrase that has come due, asked for from memory before the drill shows it. */
+export type ReviewPhrase = { native: string; roman: string; en: string };
+
+/** Enough to measure recall, few enough not to delay the conversation. */
+const MAX_REVIEW = 2;
 
 export default function Dialogue({
   district,
@@ -73,6 +79,8 @@ export default function Dialogue({
   onComplete,
   onPoints,
   ttsPrefetchRef,
+  reviewPhrases = [],
+  onReviewed,
 }: {
   district: District;
   baseLang: BaseLangCode;
@@ -83,14 +91,35 @@ export default function Dialogue({
   onComplete: (id: string, reward: number) => void;
   onPoints: (points: number) => void;
   ttsPrefetchRef?: RefObject<TtsPrefetchMap>;
+  /** Due phrases this NPC teaches. Asked for before the answer is shown. */
+  reviewPhrases?: ReviewPhrase[];
+  onReviewed?: (native: string) => void;
 }) {
   const steps = target.lesson;
   const hasPrior = priorMemory.length > 0;
 
+  // Fixed at mount: the queue must not shift under the learner if the parent
+  // removes a phrase once it has been answered.
+  const [reviewQueue] = useState<ReviewPhrase[]>(() => reviewPhrases.slice(0, MAX_REVIEW));
+  const [reviewIndex, setReviewIndex] = useState(0);
+  const [reviewDone, setReviewDone] = useState(reviewQueue.length === 0);
+  /** The learner asked to see the line before answering: practice, not recall. */
+  const [reviewRevealed, setReviewRevealed] = useState(false);
+  const [reviewResult, setReviewResult] = useState<{
+    points: number;
+    verdicts: WordVerdict[];
+    unaided: boolean;
+  } | null>(null);
+  const [reviewRetries, setReviewRetries] = useState<Set<number>>(new Set());
+  const [reviewStats, setReviewStats] = useState({ asked: 0, recalled: 0 });
+  const reviewItem = reviewQueue[reviewIndex];
+
   const [stepIndex, setStepIndex] = useState(0);
   const [recallDone, setRecallDone] = useState(!hasPrior);
   const [recallLine, setRecallLine] = useState<string | null>(null);
-  const [phase, setPhase] = useState<Phase>(hasPrior ? "recall" : "npc");
+  const [phase, setPhase] = useState<Phase>(
+    reviewQueue.length ? "review" : hasPrior ? "recall" : "npc",
+  );
   const [errandTurns, setErrandTurns] = useState<{ who: "player" | "npc"; text: string }[]>([]);
   const [errandHint, setErrandHint] = useState<string | null>(null);
   const [errandBusy, setErrandBusy] = useState(false);
@@ -212,8 +241,10 @@ export default function Dialogue({
     setPhase("player");
   }, []);
 
+  const recallStartedRef = useRef(false);
   useEffect(() => {
-    if (!hasPrior) return;
+    if (!hasPrior || !reviewDone || recallStartedRef.current) return;
+    recallStartedRef.current = true;
     let cancelled = false;
 
     (async () => {
@@ -248,10 +279,10 @@ export default function Dialogue({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reviewDone]);
 
   useEffect(() => {
-    if (!recallDone || !step) return;
+    if (!reviewDone || !recallDone || !step) return;
     setPhase("npc");
     setAttempt(null);
     setHeardNothing(false);
@@ -261,7 +292,7 @@ export default function Dialogue({
       audioRef.current?.pause();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepIndex, recallDone]);
+  }, [stepIndex, recallDone, reviewDone]);
 
   useEffect(() => {
     return () => {
@@ -377,6 +408,67 @@ export default function Dialogue({
     }
   }
 
+  /**
+   * One delayed-recall attempt: the learner saw only the meaning.
+   *
+   * This is the evidence the schedule most needs and the drill cannot give,
+   * because the drill always shows the line. It is recorded with
+   * answerVisible false only if the learner never asked to see it; revealing
+   * first turns it into practice, capped at Hard like any read-aloud attempt.
+   * One scored attempt per phrase: a second go after seeing the answer is
+   * rehearsal, and counting it would blur exactly the distinction this exists
+   * to measure.
+   */
+  function handleReviewAttempt(transcript: string) {
+    if (!reviewItem) return;
+    const scored = scoreAttempt(reviewItem.native, transcript);
+
+    const offScript = !looksLikeTargetScript(transcript, district.script);
+    const probableMishear = scored.points < 40 && (offScript || scored.points === 0);
+    if (probableMishear && !reviewRetries.has(reviewIndex)) {
+      setReviewRetries((prev) => new Set(prev).add(reviewIndex));
+      setMisheard(true);
+      playSfx("error");
+      return;
+    }
+    setMisheard(false);
+
+    const unaided = !reviewRevealed;
+    setReviewResult({ points: scored.points, verdicts: scored.verdicts, unaided });
+    setReviewStats((st) => ({
+      asked: st.asked + 1,
+      recalled: st.recalled + (unaided && scored.points >= 72 ? 1 : 0),
+    }));
+    void saveReview({
+      districtId: district.id,
+      lang: district.language,
+      attempts: [{ phraseNative: reviewItem.native, points: scored.points, answerVisible: !unaided }],
+    });
+    onReviewed?.(reviewItem.native);
+    posthog.capture("delayed_recall_attempted", {
+      task_id: target.id,
+      district_language: district.language,
+      points: scored.points,
+      unaided,
+    });
+    if (unaided && scored.points >= 72) playSfx("success");
+    else if (scored.points >= 40) playSfx("partial");
+    else playSfx("error");
+  }
+
+  function nextReview() {
+    setReviewResult(null);
+    setReviewRevealed(false);
+    setMisheard(false);
+    if (reviewIndex + 1 < reviewQueue.length) {
+      setReviewIndex((i) => i + 1);
+      return;
+    }
+    // Hand over to the normal opening, which was waiting on this.
+    setPhase(hasPrior ? "recall" : "npc");
+    setReviewDone(true);
+  }
+
   async function onMicUp() {
     if (!voice.recording) return;
     playSfx("tap");
@@ -385,6 +477,11 @@ export default function Dialogue({
     if (!transcript) {
       setHeardNothing(true);
       playSfx("error");
+      return;
+    }
+
+    if (phase === "review") {
+      handleReviewAttempt(transcript);
       return;
     }
 
@@ -525,7 +622,7 @@ export default function Dialogue({
           <AlertDescription>{objectiveBrief}</AlertDescription>
         </Alert>
 
-        {phase !== "finished" && step && (
+        {phase !== "finished" && phase !== "review" && step && (
           <div className="grid gap-3 p-4 sm:grid-cols-2">
             <Card className="gap-2 py-4">
               <CardHeader className="px-4 pb-0">
@@ -633,6 +730,102 @@ export default function Dialogue({
                 </Button>
               )}
             </div>
+          </div>
+        )}
+
+        {phase === "review" && reviewItem && (
+          <div className="flex flex-col gap-3 border-t-2 border-border px-4 py-4">
+            <div>
+              <p className="text-xs font-heading uppercase tracking-wide text-foreground/55">
+                From memory · {reviewIndex + 1} of {reviewQueue.length}
+              </p>
+              <h3 className="mt-1 font-heading text-base">
+                You learned this from {target.name}. How would you say it?
+              </h3>
+              <p className="mt-2 text-lg leading-snug">&ldquo;{reviewItem.en}&rdquo;</p>
+            </div>
+
+            {(reviewRevealed || reviewResult) && (
+              <div className="rounded-base border-2 border-border bg-secondary-background px-3 py-2">
+                <p className="font-medium">
+                  {reviewItem.roman.split(/\s+/).map((w, i) => (
+                    <span
+                      key={i}
+                      className={reviewResult ? verdictColor[reviewResult.verdicts[i] ?? "red"] : undefined}
+                    >
+                      {w}{" "}
+                    </span>
+                  ))}
+                </p>
+                <p className="font-indic text-sm text-foreground/60" lang={district.language}>
+                  {reviewItem.native}
+                </p>
+              </div>
+            )}
+
+            {misheard && (
+              <p className="rounded-base border-2 border-border bg-main/20 px-2 py-1.5 text-center text-xs">
+                That did not come through clearly. Say it once more, this one will
+                not count against you.
+              </p>
+            )}
+
+            {!reviewResult ? (
+              <div className="flex flex-col items-center gap-2">
+                <Button
+                  type="button"
+                  size="icon"
+                  className={cn(
+                    "size-16 touch-none select-none text-2xl",
+                    voice.recording && "bg-chart-2 hover:bg-chart-2",
+                  )}
+                  onMouseDown={() => {
+                    playSfx("tap");
+                    voice.start();
+                  }}
+                  onMouseUp={onMicUp}
+                  onMouseLeave={onMicUp}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    playSfx("tap");
+                    voice.start();
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    void onMicUp();
+                  }}
+                  disabled={voice.transcribing}
+                  aria-label="Hold to speak"
+                >
+                  {voice.transcribing ? "···" : voice.recording ? "◉" : "🎙"}
+                </Button>
+                {!reviewRevealed ? (
+                  <Button type="button" variant="neutral" size="sm" onClick={() => setReviewRevealed(true)}>
+                    Show me the line
+                  </Button>
+                ) : (
+                  <p className="text-center text-xs text-foreground/55">
+                    Line shown, so this attempt counts as practice rather than recall.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-center">
+                <p className="text-sm font-medium">
+                  {reviewResult.unaided
+                    ? reviewResult.points >= 72
+                      ? "Recalled without help."
+                      : "Not there yet without the line. It will come back sooner."
+                    : "Said with the line shown. Counted as practice."}
+                </p>
+                <p className="text-xs text-foreground/55">
+                  Phrase match {reviewResult.points}%
+                </p>
+                <Button type="button" size="sm" className="w-full max-w-xs" onClick={nextReview}>
+                  {reviewIndex + 1 < reviewQueue.length ? "Next" : `Talk to ${target.name}`}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -746,6 +939,15 @@ export default function Dialogue({
                 this encounter. No line here is an estimate or a compliment:
                 each one traces to a counter or a grader verdict. */}
             <ul className="w-full max-w-xs space-y-1.5 text-left text-sm">
+              {reviewStats.asked > 0 && (
+                <li className="flex gap-2">
+                  <span aria-hidden>{reviewStats.recalled === reviewStats.asked ? "✓" : "·"}</span>
+                  <span>
+                    Recalled {reviewStats.recalled} of {reviewStats.asked} due phrase
+                    {reviewStats.asked === 1 ? "" : "s"} before seeing the line
+                  </span>
+                </li>
+              )}
               <li className="flex gap-2">
                 <span aria-hidden>{errandFallbackTurns === 0 ? "✓" : "·"}</span>
                 <span>

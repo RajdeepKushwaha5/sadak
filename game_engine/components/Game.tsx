@@ -20,6 +20,7 @@ import type { DistrictProgress } from "@/lib/game/progress";
 import { errandLevelNumber, lessonTierFor } from "@/lib/game/levels";
 import { adaptiveTier, type RetentionSignal } from "@/lib/game/adaptive";
 import DailyRound, { type Round } from "@/components/DailyRound";
+import type { ReviewPhrase } from "@/components/Dialogue";
 import { useGameAudio } from "@/lib/audio/useGameAudio";
 import { playSfx } from "@/lib/audio/sfx";
 import Title from "./Title";
@@ -67,6 +68,8 @@ export default function GameShell() {
   const [roundOpen, setRoundOpen] = useState(false);
   /** Round stops practised this session, by task id. */
   const [roundCleared, setRoundCleared] = useState<Set<string>>(new Set());
+  /** Due phrases per NPC, asked for from memory before that NPC's drill. */
+  const [duePhrases, setDuePhrases] = useState<Record<string, ReviewPhrase[]>>({});
 
   const [district, setDistrict] = useState<District | null>(null);
   const [tasks, setTasks] = useState<StreetTask[]>([]);
@@ -361,7 +364,7 @@ export default function GameShell() {
         type RoundDistrict = {
           districtId: string;
           dueCount: number;
-          tasks: { taskId: string }[];
+          tasks: { taskId: string; phrases: ReviewPhrase[] }[];
           retention?: RetentionSignal;
         };
         const here = (round.districts as RoundDistrict[]).find(
@@ -369,6 +372,9 @@ export default function GameShell() {
         );
         setDueCount(here?.dueCount ?? 0);
         setRetention(here?.retention ?? null);
+        setDuePhrases(
+          Object.fromEntries((here?.tasks ?? []).map((t) => [t.taskId, t.phrases ?? []])),
+        );
         gameRef.current?.setDue(here?.tasks.map((t) => t.taskId) ?? []);
       })
       .catch(() => {});
@@ -786,6 +792,23 @@ export default function GameShell() {
           onComplete={onComplete}
           onPoints={onPoints}
           ttsPrefetchRef={ttsPrefetchRef}
+          reviewPhrases={duePhrases[talking.id] ?? []}
+          onReviewed={(native) => {
+            // Asked once, answered once: the phrase is no longer due in this
+            // session, and when an NPC has nothing left due its marker stops
+            // pulsing violet.
+            setDuePhrases((prev) => {
+              const left = (prev[talking.id] ?? []).filter((p) => p.native !== native);
+              const next = { ...prev, [talking.id]: left };
+              gameRef.current?.setDue(
+                Object.entries(next)
+                  .filter(([, ps]) => ps.length > 0)
+                  .map(([id]) => id),
+              );
+              return next;
+            });
+            setDueCount((n) => Math.max(0, n - 1));
+          }}
         />
       )}
     </div>
