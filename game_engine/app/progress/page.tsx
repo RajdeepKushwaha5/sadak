@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, BrainCircuit } from "lucide-react";
 import PhraseReport from "@/components/report/PhraseReport";
+import DevTimeShift from "@/components/report/DevTimeShift";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
@@ -36,6 +37,7 @@ export default function ProgressPage() {
           </div>
         </div>
 
+        {process.env.NODE_ENV === "development" && <DevTimeShift />}
         <PhraseReport />
       </div>
     </main>

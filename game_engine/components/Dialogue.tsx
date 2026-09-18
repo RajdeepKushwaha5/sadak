@@ -75,6 +75,9 @@ export default function Dialogue({
   /** Phrases already credited this errand. A ref, so two quick turns cannot
    *  both read stale state and credit the same phrase twice. */
   const creditedRef = useRef<Set<string>>(new Set());
+  /** Evidence for the completion card: only what was actually observed. */
+  const [errandHintsSeen, setErrandHintsSeen] = useState(0);
+  const [errandFallbackTurns, setErrandFallbackTurns] = useState(0);
   const [attempt, setAttempt] = useState<{
     transcript: string;
     verdicts: WordVerdict[];
@@ -293,6 +296,8 @@ export default function Dialogue({
 
       setErrandTurns([...transcript, { who: "npc", text: g.reply }]);
       setErrandHint(g.hint ?? null);
+      if (g.hint) setErrandHintsSeen((n) => n + 1);
+      if (g.englishFallback === true) setErrandFallbackTurns((n) => n + 1);
       setErrandChecks(Array.isArray(g.checks) ? g.checks : []);
       pushTurn({ role: "user", content: playerText });
       pushTurn({ role: "assistant", content: g.reply });
@@ -708,18 +713,60 @@ export default function Dialogue({
         )}
 
         {phase === "finished" && (
-          <div className="flex flex-col items-center gap-2 border-t-2 border-border px-4 py-6 text-center">
+          <div className="flex flex-col items-center gap-3 border-t-2 border-border px-4 py-6 text-center">
             <Badge className="size-10 justify-center text-lg">✓</Badge>
-            <h3 className="text-xl font-heading">{ui("errandComplete", baseLang)}</h3>
-            <p className="text-sm text-foreground/80">
-              {gradedCount}/{stepsGraded} {ui("linesScored", baseLang)}{" "}
-              <strong>{avgAccuracy}%</strong>
+            <h3 className="text-xl font-heading">{completionNoteGloss}</h3>
+
+            {/* What the learner did, stated only from what was observed in
+                this encounter. No line here is an estimate or a compliment:
+                each one traces to a counter or a grader verdict. */}
+            <ul className="w-full max-w-xs space-y-1.5 text-left text-sm">
+              <li className="flex gap-2">
+                <span aria-hidden>{errandFallbackTurns === 0 ? "✓" : "·"}</span>
+                <span>
+                  {errandFallbackTurns === 0
+                    ? `Held the conversation in ${district.languageLabel}, no English`
+                    : `Switched to English on ${errandFallbackTurns} turn${errandFallbackTurns === 1 ? "" : "s"}`}
+                </span>
+              </li>
+              <li className="flex gap-2">
+                <span aria-hidden>{errandHintsSeen === 0 ? "✓" : "·"}</span>
+                <span>
+                  {errandHintsSeen === 0
+                    ? "Got there without a hint"
+                    : `Needed ${errandHintsSeen} hint${errandHintsSeen === 1 ? "" : "s"} from ${target.name}`}
+                </span>
+              </li>
+              {errandUsed.length > 0 && (
+                <li className="flex gap-2">
+                  <span aria-hidden>✓</span>
+                  <span>
+                    Used {errandUsed.length} of the {stepsGraded} practised line
+                    {stepsGraded === 1 ? "" : "s"} without the script
+                  </span>
+                </li>
+              )}
+              {retryOffered.size > 0 && (
+                <li className="flex gap-2">
+                  <span aria-hidden>·</span>
+                  <span>
+                    {retryOffered.size} drill line{retryOffered.size === 1 ? " was" : "s were"} not
+                    heard clearly and got a free retry
+                  </span>
+                </li>
+              )}
+            </ul>
+
+            <p className="max-w-xs text-xs text-foreground/60">
+              Drill: {gradedCount}/{stepsGraded} {ui("linesScored", baseLang)}{" "}
+              <strong>{avgAccuracy}%</strong>. These lines come back on your daily
+              round as they start to fade.
             </p>
+
             <p className="font-base text-chart-4">
               {/* Optional errands (the haircut) pay XP, not cash — showing
                   "+₹0" would read as a bug rather than a design choice. */}
-              {target.reward > 0 ? `+₹${target.reward}` : `+${target.xpReward ?? 0} XP`} ·{" "}
-              {completionNoteGloss}
+              {target.reward > 0 ? `+₹${target.reward}` : `+${target.xpReward ?? 0} XP`}
             </p>
             <Button type="button" className="mt-2 w-full max-w-xs" onClick={onClose}>
               {ui("done", baseLang)}
